@@ -14,6 +14,16 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
+    function controllerExists() {
+      return exists(/databases/$(database)/documents/system_settings/controller);
+    }
+
+    function isPrimaryController() {
+      return signedIn() &&
+        controllerExists() &&
+        get(/databases/$(database)/documents/system_settings/controller).data.primaryUid == request.auth.uid;
+    }
+
     function isSuperAdmin() {
       return signedIn() && (
         request.auth.token.email == 'gfa437926@gmail.com' ||
@@ -37,14 +47,30 @@ service cloud.firestore {
     // User profiles & RBAC
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow create: if signedIn() && (
-        isSuperAdmin() ||
-        request.auth.uid == uid
-      );
-      allow update: if signedIn() && (
-        isSuperAdmin() ||
-        (isActiveUser() && request.auth.uid == uid)
-      );
+
+      // A new account may create only its own limited profile. The first
+      // controller is elevated only after the controller bootstrap document
+      // has been created successfully for this same authenticated UID.
+      allow create: if signedIn() &&
+        request.auth.uid == uid &&
+        request.resource.data.uid == uid &&
+        request.resource.data.email == request.auth.token.email &&
+        request.resource.data.isActive == true &&
+        (
+          request.resource.data.role == 'it_manager' ||
+          (isPrimaryController() && request.resource.data.role == 'admin') ||
+          (request.auth.token.email == 'gfa437926@gmail.com' && request.resource.data.role == 'admin')
+        );
+
+      // Users can edit basic profile details only; role and activation state
+      // are reserved for the super-admin path.
+      allow update: if isSuperAdmin() ||
+        (
+          isActiveUser() &&
+          request.auth.uid == uid &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['displayName', 'updatedAt'])
+        );
       allow delete: if isSuperAdmin() && request.auth.uid != uid;
     }
 
@@ -109,8 +135,19 @@ service cloud.firestore {
 
     // System settings and controller configuration
     match /system_settings/{docId} {
-      allow read: if signedIn();
-      allow write: if signedIn();
+      allow read: if isActiveUser();
+
+      // Allow exactly one initial controller bootstrap. Subsequent edits to
+      // controller identity and all other system settings require that UID.
+      allow create: if docId == 'controller' &&
+        signedIn() &&
+        !controllerExists() &&
+        request.resource.data.primaryUid == request.auth.uid &&
+        request.resource.data.primaryEmail == request.auth.token.email &&
+        request.resource.data.keys().hasOnly(['primaryUid', 'primaryEmail', 'registeredAt']);
+
+      allow update, delete: if docId == 'controller' && isPrimaryController();
+      allow create, update, delete: if docId != 'controller' && isPrimaryController();
     }
 
     // Documents and attachment metadata
