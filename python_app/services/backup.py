@@ -206,7 +206,14 @@ class RestoreResult:
 
 
 def _safe_zip_member(name: str) -> bool:
-    if not name or "\\\\" in name or "\\x00" in name or ":" in name or name.startswith("/"):
+    if (
+        not name
+        or "\\\\" in name
+        or "\\x00" in name
+        or ":" in name
+        or name.startswith("/")
+        or any(ord(character) < 32 for character in name)
+    ):
         return False
     parts = name.split("/")
     return all(part not in {"", ".", ".."} for part in parts)
@@ -337,6 +344,8 @@ def restore_sqlite_backup_archive(
         safety_path = Path(safety_backup_path).expanduser().resolve()
     if safety_path == Path(archive_path).expanduser().resolve():
         raise ValueError("لا يجوز الكتابة فوق ملف النسخة التي ستتم استعادتها.")
+    if safety_path.exists():
+        raise FileExistsError("ملف نسخة الأمان موجود مسبقاً؛ اختر اسماً آخر حتى لا تُستبدل نسخة سابقة.")
 
     safety = create_backup_archive(
         safety_path,
@@ -370,6 +379,24 @@ def restore_sqlite_backup_archive(
                 integrity_connection.close()
             if not integrity or integrity[0] != "ok":
                 raise ValueError("فشل فحص سلامة قاعدة البيانات الموجودة داخل النسخة.")
+            with sqlite3.connect(database_staging) as schema_connection:
+                restored_tables = {
+                    row[0] for row in schema_connection.execute(
+                        "select name from sqlite_master where type='table'"
+                    ).fetchall()
+                }
+            required_tables = {
+                "offices", "assets", "asset_movements", "import_batches",
+                "audit_logs", "app_users", "custody_cards", "custody_items",
+                "maintenance_records", "spare_parts", "maintenance_part_usage",
+                "purchase_records", "asset_documents",
+            }
+            missing_tables = sorted(required_tables - restored_tables)
+            if missing_tables:
+                raise ValueError(
+                    "مخطط قاعدة البيانات داخل النسخة ناقص الجداول: "
+                    + ", ".join(missing_tables)
+                )
 
             manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
             for item in manifest["attachments"]:
