@@ -85,6 +85,7 @@ Before native Google sign-in can work on a device:
 4. Download the refreshed `google-services.json` into `android/app/` after adding the fingerprints.
 5. In `android/variables.gradle`, enable the Google provider for the plugin by adding `rgcfaIncludeGoogle = true` and `androidxCredentialsVersion = '1.3.0'` inside the existing `ext { ... }` block.
 6. Run `npm run android:sync` again, then build and test on a real Android device.
+7. For GitHub Actions APK builds that must support native sign-in, add a repository Actions secret named `FIREBASE_ANDROID_CONFIG` containing the **base64-encoded contents** of `google-services.json`. The workflow writes it into the generated Android app only during the build; the JSON file is not committed.
 
 The native Google provider is configured in `capacitor.config.ts`. The Firebase Authentication plugin signs in natively and the app bridges the Google ID token into the Firebase JS SDK. Google Sheets API access still requires a separate OAuth access-token/scope flow; a successful Firebase sign-in alone does not grant Sheets API access.
 
