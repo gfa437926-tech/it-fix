@@ -129,6 +129,45 @@ def test_stale_admin_object_cannot_create_users_after_deactivation(session: Sess
     assert session.scalar(select(AppUser).where(AppUser.username == "blocked.user")) is None
 
 
+def test_require_active_user_rejects_disabled_account(session: Session) -> None:
+    from python_app.services.auth import require_active_user
+
+    admin = bootstrap_first_admin(session, "rootuser", "مدير النظام", "Secure-Password-2026!")
+    second = create_user(
+        session, admin, "second.admin", "مدير ثان",
+        "Second-Admin-Password-2026!", "admin",
+    )
+    detached_admin = admin
+    session.expunge(detached_admin)
+    set_user_active(session, second, detached_admin.id, False)
+
+    with pytest.raises(PermissionError, match="تم إيقاف هذا الحساب"):
+        require_active_user(session, detached_admin)
+
+
+def test_require_active_user_returns_latest_database_profile(session: Session) -> None:
+    from python_app.services.auth import require_active_user
+
+    admin = bootstrap_first_admin(session, "rootuser", "مدير النظام", "Secure-Password-2026!")
+    second = create_user(
+        session, admin, "second.admin", "مدير ثان",
+        "Second-Admin-Password-2026!", "admin",
+    )
+    detached_admin = admin
+    session.expunge(detached_admin)
+
+    with session.begin():
+        db_admin = session.get(AppUser, detached_admin.id)
+        assert db_admin is not None
+        db_admin.display_name = "المدير المحدّث"
+
+    current = require_active_user(session, detached_admin)
+
+    assert current.display_name == "المدير المحدّث"
+    assert current.is_active is True
+    session.rollback()
+
+
 def test_last_active_admin_cannot_be_deactivated(session: Session) -> None:
     admin = bootstrap_first_admin(session, "rootuser", "مدير", "Secure-Password-2026!")
 
