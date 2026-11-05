@@ -308,7 +308,10 @@ def set_user_role(
     if new_role not in {"admin", "it_manager"}:
         raise ValueError("الدور المحدد غير معروف.")
 
-    with session.begin():
+    # UI and service callers may have an autobegun read transaction; use a
+    # savepoint in that case instead of failing with "transaction already begun".
+    transaction = session.begin_nested() if session.in_transaction() else session.begin()
+    with transaction:
         current_actor = _require_active_admin(session, actor)
         user = session.get(AppUser, target_user_id)
         if user is None:
