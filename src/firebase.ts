@@ -1,5 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, indexedDBLocalPersistence, initializeAuth } from 'firebase/auth';
+import { Capacitor } from '@capacitor/core';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -9,7 +10,16 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0
 // Export Firestore with explicit database ID from config
 const firestoreDbId = (firebaseConfig as { firestoreDatabaseId?: string }).firestoreDatabaseId;
 export const db = firestoreDbId ? getFirestore(app, firestoreDbId) : getFirestore(app);
-export const auth = getAuth(app);
+// Capacitor WebViews need durable IndexedDB persistence for the Firebase JS SDK.
+export const auth = (() => {
+  if (!Capacitor.isNativePlatform()) return getAuth(app);
+  try {
+    return initializeAuth(app, { persistence: indexedDBLocalPersistence });
+  } catch {
+    // Auth may already be initialized during hot reload.
+    return getAuth(app);
+  }
+})();
 export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
