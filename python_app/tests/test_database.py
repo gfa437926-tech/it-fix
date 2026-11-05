@@ -54,3 +54,51 @@ def test_complete_inventory_schema_passes_readiness_without_implicit_creation() 
         } <= tables
     finally:
         target.dispose()
+
+
+def test_empty_local_database_is_created_with_all_current_tables() -> None:
+    target = create_engine("sqlite://")
+    try:
+        initialize_database(target, allow_schema_creation=True)
+        with target.connect() as connection:
+            tables = set(connection.execute(text(
+                "select name from sqlite_master where type='table'"
+            )).scalars())
+        assert set(Base.metadata.tables) <= tables
+    finally:
+        target.dispose()
+
+
+def test_existing_schema_with_missing_columns_is_rejected_before_auto_creation() -> None:
+    target = create_engine("sqlite://")
+    try:
+        with target.begin() as connection:
+            connection.execute(text(
+                "create table assets (id varchar(36) primary key, brand varchar(120), model varchar(160))"
+            ))
+
+        with pytest.raises(RuntimeError, match="الأعمدة الناقصة") as error:
+            initialize_database(target, allow_schema_creation=True)
+
+        assert "serial_number" in str(error.value)
+        with target.connect() as connection:
+            tables = set(connection.execute(text(
+                "select name from sqlite_master where type='table'"
+            )).scalars())
+        assert tables == {"assets"}
+    finally:
+        target.dispose()
+
+
+def test_schema_readiness_detects_missing_column_when_tables_exist() -> None:
+    target = create_engine("sqlite://")
+    try:
+        with target.begin() as connection:
+            connection.execute(text(
+                "create table assets (id varchar(36) primary key, brand varchar(120), model varchar(160))"
+            ))
+
+        with pytest.raises(RuntimeError, match="مخطط قاعدة البيانات لا يطابق"):
+            initialize_database(target, allow_schema_creation=False)
+    finally:
+        target.dispose()
