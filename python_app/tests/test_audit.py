@@ -124,6 +124,43 @@ def test_csv_export_uses_arabic_headers_utf8_bom_and_escapes_formulas(
     assert "تفاصيل إضافية" in rows[1][5]
 
 
+def test_csv_export_applies_entity_and_action_filters(
+    session: Session,
+    tmp_path: Path,
+) -> None:
+    add_audit(
+        session,
+        entity_type="asset",
+        entity_id="asset-filter-1",
+        action="created",
+        actor_name="مدير",
+        details="إضافة أصل",
+        occurred_at=datetime(2026, 4, 1, tzinfo=timezone.utc),
+    )
+    add_audit(
+        session,
+        entity_type="custody_card",
+        entity_id="card-filter-2",
+        action="approved",
+        actor_name="مدير",
+        details="اعتماد عهدة",
+        occurred_at=datetime(2026, 4, 2, tzinfo=timezone.utc),
+    )
+    destination = tmp_path / "approved-custody.csv"
+
+    assert export_audit_logs_to_csv(
+        session,
+        destination,
+        entity_type="custody_card",
+        action="approved",
+    ) == 1
+
+    with destination.open(encoding="utf-8-sig", newline="") as stream:
+        rows = list(csv.DictReader(stream))
+    assert len(rows) == 1
+    assert rows[0]["معرّف السجل"] == "card-filter-2"
+
+
 def test_filtered_csv_export_contains_only_matching_records(
     session: Session,
     tmp_path: Path,
