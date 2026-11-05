@@ -1552,13 +1552,49 @@ class AssetInventoryApp:
         messagebox.showinfo("حالة قاعدة البيانات", f"الحالة: {label}\nالنوع أو التفاصيل: {detail}", parent=self.root)
 
 
+def _complete_required_password_change(root: tk.Tk, user: AppUser) -> bool:
+    while user.must_change_password:
+        current = simpledialog.askstring(
+            "تغيير كلمة المرور مطلوب",
+            "الحساب جديد. أدخل كلمة المرور الأولية التي استلمتها:",
+            show="*", parent=root,
+        )
+        if current is None:
+            return False
+        new = simpledialog.askstring(
+            "تعيين كلمة مرور جديدة",
+            "اختر كلمة مرور جديدة لا تقل عن 12 محرفاً:",
+            show="*", parent=root,
+        )
+        if new is None:
+            return False
+        confirm = simpledialog.askstring(
+            "تأكيد كلمة المرور",
+            "أعد إدخال كلمة المرور الجديدة:",
+            show="*", parent=root,
+        )
+        if confirm is None:
+            return False
+        if new != confirm:
+            messagebox.showerror("كلمتا المرور مختلفتان", "تأكد من تطابق كلمتي المرور.", parent=root)
+            continue
+        try:
+            with SessionLocal() as session:
+                change_own_password(session, user.id, current, new)
+            user.must_change_password = False
+            return True
+        except Exception as exc:
+            messagebox.showerror("تعذر تغيير كلمة المرور", str(exc), parent=root)
+    return True
+
+
 def run_app() -> None:
     root = tk.Tk()
+    root.withdraw()
     try:
         from .database import initialize_database
         initialize_database()
     except Exception as exc:
-        root.withdraw()
         messagebox.showerror(
             "تعذر تهيئة قاعدة البيانات",
             f"{exc}\n\nراجع إعدادات python_app/.env ودليل python_app/README.md.",
@@ -1566,5 +1602,18 @@ def run_app() -> None:
         )
         root.destroy()
         return
-    AssetInventoryApp(root)
+
+    login = LoginDialog(root)
+    root.wait_window(login)
+    user = login.user
+    if user is None:
+        root.destroy()
+        return
+
+    root.deiconify()
+    if not _complete_required_password_change(root, user):
+        root.destroy()
+        return
+
+    AssetInventoryApp(root, user)
     root.mainloop()
