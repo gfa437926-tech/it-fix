@@ -204,6 +204,18 @@ def _require_active_admin(session: Session, actor: AppUser) -> AppUser:
     return current_actor
 
 
+def require_active_user(session: Session, actor: AppUser) -> AppUser:
+    """Re-read a session user from the database before trusting the session."""
+    current_actor = session.scalar(
+        select(AppUser)
+        .where(AppUser.id == actor.id)
+        .execution_options(populate_existing=True)
+    )
+    if current_actor is None or not current_actor.is_active:
+        raise PermissionError("تم إيقاف هذا الحساب أو حذفه. سجّل الدخول بحساب نشط.")
+    return current_actor
+
+
 def require_active_admin(session: Session, actor: AppUser) -> AppUser:
     """Return the current database-backed admin record or reject stale sessions."""
     return _require_active_admin(session, actor)
