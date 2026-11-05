@@ -11,6 +11,7 @@ from python_app.services.auth import (
     bootstrap_first_admin,
     change_own_password,
     create_user,
+    reset_user_password,
     list_users,
     set_user_active,
 )
@@ -166,6 +167,53 @@ def test_require_active_user_returns_latest_database_profile(session: Session) -
     assert current.display_name == "المدير المحدّث"
     assert current.is_active is True
     session.rollback()
+
+
+def test_admin_password_reset_forces_change_and_clears_lockout(session: Session) -> None:
+    admin = bootstrap_first_admin(session, "rootuser", "مدير النظام", "Secure-Password-2026!")
+    operator = create_user(
+        session, admin, "asset.operator", "مشغل الأصول",
+        "Operator-Password-2026!", "it_manager",
+    )
+    for _ in range(4):
+        with pytest.raises(ValueError):
+            authenticate_user(session, "asset.operator", "incorrect-password")
+    with pytest.raises(ValueError, match="10 دقائق"):
+        authenticate_user(session, "asset.operator", "incorrect-password")
+
+    reset_user_password(
+        session, admin, operator.id, "Temporary-Password-2027!"
+    )
+
+    refreshed = session.get(AppUser, operator.id)
+    assert refreshed is not None
+    assert refreshed.must_change_password is True
+    assert refreshed.failed_login_attempts == 0
+    assert refreshed.locked_until is None
+    assert authenticate_user(
+        session, "asset.operator", "Temporary-Password-2027!"
+    ).must_change_password is True
+
+    audit = session.scalar(select(AuditLog).where(
+        AuditLog.entity_type == "app_user",
+        AuditLog.entity_id == operator.id,
+        AuditLog.action == "password_reset",
+    ))
+    assert audit is not None
+
+
+def test_admin_cannot_reset_password_for_disabled_account(session: Session) -> None:
+    admin = bootstrap_first_admin(session, "rootuser", "مدير النظام", "Secure-Password-2026!")
+    operator = create_user(
+        session, admin, "asset.operator", "مشغل الأصول",
+        "Operator-Password-2026!", "it_manager",
+    )
+    set_user_active(session, admin, operator.id, False)
+
+    with pytest.raises(ValueError, match="حساب موقوف"):
+        reset_user_password(
+            session, admin, operator.id, "Temporary-Password-2027!"
+        )
 
 
 def test_last_active_admin_cannot_be_deactivated(session: Session) -> None:
