@@ -247,3 +247,66 @@ def test_backup_verification_detects_manifest_hash_tampering(tmp_path: Path) -> 
     finally:
         session.close()
         engine.dispose()
+
+
+def test_backup_never_overwrites_existing_archive(tmp_path: Path) -> None:
+    engine = create_engine("sqlite://")
+    target = tmp_path / "existing-backup.zip"
+    original = b"keep previous backup"
+    target.write_bytes(original)
+    try:
+        with pytest.raises(FileExistsError, match="موجود مسبقاً"):
+            create_backup_archive(
+                target,
+                database_engine=engine,
+                data_directory=tmp_path / "data",
+            )
+        assert target.read_bytes() == original
+    finally:
+        engine.dispose()
+
+
+def test_backup_rejects_destination_inside_attachment_directory(tmp_path: Path) -> None:
+    engine = create_engine("sqlite://")
+    documents = tmp_path / "data" / "documents"
+    documents.mkdir(parents=True)
+    try:
+        with pytest.raises(ValueError, match="خارج مجلد مرفقات الأصول"):
+            create_backup_archive(
+                documents / "backup.zip",
+                database_engine=engine,
+                data_directory=tmp_path / "data",
+            )
+    finally:
+        engine.dispose()
+
+
+def test_restore_rejects_archive_inside_documents_that_will_be_replaced(tmp_path: Path) -> None:
+    from python_app.services.backup import restore_sqlite_backup_archive
+
+    database_path = tmp_path / "live-data" / "itfix_assets.db"
+    database_path.parent.mkdir(parents=True)
+    engine = create_engine(f"sqlite:///{database_path}")
+    Base.metadata.create_all(engine)
+    try:
+        good_archive = tmp_path / "good-backup.zip"
+        create_backup_archive(
+            good_archive,
+            database_engine=engine,
+            data_directory=tmp_path / "live-data",
+        )
+        documents = tmp_path / "live-data" / "documents"
+        documents.mkdir()
+        archive_inside_documents = documents / "restore-source.zip"
+        archive_inside_documents.write_bytes(good_archive.read_bytes())
+
+        with pytest.raises(ValueError, match="داخل مجلد المرفقات"):
+            restore_sqlite_backup_archive(
+                archive_inside_documents,
+                database_engine=engine,
+                data_directory=tmp_path / "live-data",
+                confirmed=True,
+            )
+        assert archive_inside_documents.is_file()
+    finally:
+        engine.dispose()
