@@ -3,6 +3,13 @@
  * Uses REST API with OAuth Bearer token obtained client-side
  */
 
+
+async function googleApiError(response: Response, fallback: string): Promise<Error> {
+  const errorData = await response.json().catch(() => null);
+  const message = errorData?.error?.message;
+  return new Error(typeof message === 'string' && message.trim() ? message : fallback);
+}
+
 export interface GoogleSpreadsheetInfo {
   spreadsheetId: string;
   spreadsheetUrl: string;
@@ -44,8 +51,7 @@ export async function createSpreadsheet(
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData?.error?.message || 'تعذر إنشاء جدول البيانات في Google Sheets');
+    throw await googleApiError(response, 'تعذر إنشاء جدول البيانات في Google Sheets');
   }
 
   const data = await response.json();
@@ -75,8 +81,7 @@ export async function getSpreadsheetInfo(
   );
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData?.error?.message || 'تعذر الوصول إلى جدول Google Sheets أو لا تملك صلاحية فتحه');
+    throw await googleApiError(response, 'تعذر الوصول إلى جدول Google Sheets أو لا تملك صلاحية فتحه');
   }
 
   const data = await response.json();
@@ -251,8 +256,7 @@ export async function syncDataToGoogleSheet(
   );
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData?.error?.message || 'تعذر إرسال البيانات إلى Google Sheets');
+    throw await googleApiError(response, 'تعذر إرسال البيانات إلى Google Sheets');
   }
 
   // The app exports a full snapshot. Remove leftover rows from a previous,
@@ -274,9 +278,8 @@ export async function syncDataToGoogleSheet(
   );
 
   if (!clearResponse.ok) {
-    const errorData = await clearResponse.json().catch(() => ({}));
-    throw new Error(
-      errorData?.error?.message ||
+    throw await googleApiError(
+      clearResponse,
       'تم إرسال البيانات، لكن تعذر تنظيف الصفوف القديمة الزائدة في Google Sheets. أعد المزامنة.'
     );
   }
@@ -301,8 +304,7 @@ export async function fetchSheetValues(
   );
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData?.error?.message || 'تعذر جلب البيانات من Google Sheet');
+    throw await googleApiError(response, 'تعذر جلب البيانات من Google Sheet');
   }
 
   const data = await response.json();
