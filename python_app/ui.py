@@ -9,7 +9,16 @@ from typing import Any
 from sqlalchemy import select
 
 from .database import SessionLocal, database_health
-from .models import Asset, AssetDocument, Office
+from .models import AppUser, Asset, AssetDocument, Office
+from .services.auth import (
+    authenticate_user,
+    bootstrap_first_admin,
+    change_own_password,
+    count_users,
+    create_user,
+    list_users,
+    set_user_active,
+)
 from .services.assets import (
     ASSET_CATEGORIES,
     ASSET_STATUSES,
@@ -61,6 +70,97 @@ STATUS_LABELS_AR = {code: label for label, code in STATUS_OPTIONS.items()}
 
 def _display_date(value: Any) -> str:
     return value.strftime("%Y-%m-%d") if value else "—"
+
+
+class LoginDialog(tk.Toplevel):
+    def __init__(self, parent: tk.Tk) -> None:
+        super().__init__(parent)
+        self.user: AppUser | None = None
+        self.first_run = False
+        with SessionLocal() as session:
+            self.first_run = count_users(session) == 0
+
+        self.title("إعداد المدير الأول" if self.first_run else "تسجيل الدخول")
+        self.geometry("480x430" if self.first_run else "440x320")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
+        self.configure(bg="#f3f6f8")
+
+        container = ttk.Frame(self, padding=24)
+        container.pack(fill="both", expand=True)
+        ttk.Label(
+            container,
+            text="تهيئة نظام جرد الأصول" if self.first_run else "تسجيل الدخول إلى IT Fix",
+            font=("Tahoma", 17, "bold"),
+        ).pack(anchor="e", pady=(0, 6))
+        description = (
+            "أنشئ حساب مدير النظام الأول. لا توجد كلمة مرور افتراضية؛ كلمة المرور لا تقل عن 12 محرفاً."
+            if self.first_run
+            else "أدخل بيانات حساب محلي نشط للمتابعة."
+        )
+        ttk.Label(
+            container, text=description, wraplength=400, justify="right",
+            style="Muted.TLabel",
+        ).pack(anchor="e", pady=(0, 15))
+
+        self.fields: dict[str, tk.StringVar] = {}
+        self._field(container, "username", "اسم الدخول", "admin")
+        if self.first_run:
+            self._field(container, "display_name", "الاسم الظاهر", "")
+        self._field(container, "password", "كلمة المرور", "")
+        if self.first_run:
+            self._field(container, "confirm", "تأكيد كلمة المرور", "")
+
+        controls = ttk.Frame(container)
+        controls.pack(fill="x", pady=(18, 0))
+        ttk.Button(controls, text="دخول" if not self.first_run else "إنشاء المدير الأول",
+                   command=self._submit).pack(side="right")
+        ttk.Button(controls, text="إغلاق", command=self._cancel).pack(side="right", padx=8)
+        self.bind("<Return>", lambda _event: self._submit())
+        self.wait_visibility()
+        self.focus_set()
+
+    def _field(self, parent: ttk.Frame, key: str, label: str, value: str) -> None:
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=5)
+        ttk.Label(row, text=label, width=18).pack(side="right", padx=(0, 8))
+        variable = tk.StringVar(value=value)
+        self.fields[key] = variable
+        entry = ttk.Entry(
+            row,
+            textvariable=variable,
+            justify="right",
+            show="*" if key in {"password", "confirm"} else "",
+        )
+        entry.pack(side="right", fill="x", expand=True)
+        if key == "username":
+            entry.focus_set()
+
+    def _submit(self) -> None:
+        username = self.fields["username"].get().strip()
+        password = self.fields["password"].get()
+        try:
+            with SessionLocal() as session:
+                if self.first_run:
+                    if password != self.fields["confirm"].get():
+                        raise ValueError("كلمتا المرور غير متطابقتين.")
+                    self.user = bootstrap_first_admin(
+                        session,
+                        username,
+                        self.fields["display_name"].get(),
+                        password,
+                    )
+                else:
+                    self.user = authenticate_user(session, username, password)
+            self.destroy()
+        except Exception as exc:
+            messagebox.showerror("تعذر تسجيل الدخول", str(exc), parent=self)
+
+    def _cancel(self) -> None:
+        self.user = None
+        self.destroy()
 
 
 class AssetDialog(tk.Toplevel):
