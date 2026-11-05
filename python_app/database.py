@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from sqlalchemy import Engine, create_engine, inspect, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from .config import settings
@@ -14,10 +15,16 @@ def build_engine(database_url: str | None = None) -> Engine:
     connect_args: dict[str, object] = {}
     if url.startswith("sqlite"):
         connect_args["check_same_thread"] = False
-    elif url.startswith("postgresql") and "sslmode=" not in url:
-        # Require TLS for hosted PostgreSQL/Supabase connections. Localhost
-        # native PostgreSQL can explicitly opt out in its own connection URL.
-        connect_args["sslmode"] = "require"
+    elif url.startswith("postgresql"):
+        parsed_url = make_url(url)
+        explicit_sslmode = parsed_url.query.get("sslmode")
+        is_local = parsed_url.host in {"localhost", "127.0.0.1", "::1"}
+        if explicit_sslmode:
+            connect_args["sslmode"] = explicit_sslmode
+        else:
+            # Local native PostgreSQL usually has TLS disabled by default.
+            # Remote PostgreSQL/Supabase connections must use TLS.
+            connect_args["sslmode"] = "disable" if is_local else "require"
 
     return create_engine(
         url,
