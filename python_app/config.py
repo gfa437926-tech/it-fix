@@ -1,13 +1,22 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-APP_DIR = Path(__file__).resolve().parent
-DATA_DIR = APP_DIR / "data"
+if getattr(sys, "frozen", False):
+    APP_DIR = Path(sys.executable).resolve().parent
+    if os.name == "nt":
+        DATA_DIR = Path(os.getenv("LOCALAPPDATA", str(APP_DIR))) / "ITFix" / "data"
+    else:
+        DATA_DIR = APP_DIR / "data"
+else:
+    APP_DIR = Path(__file__).resolve().parent
+    DATA_DIR = APP_DIR / "data"
+
 load_dotenv(APP_DIR / ".env")
 
 
