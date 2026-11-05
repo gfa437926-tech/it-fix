@@ -224,7 +224,8 @@ export async function syncDataToGoogleSheet(
 
   // Update sheets via batchUpdate values
   const payload = {
-    valueInputOption: 'USER_ENTERED',
+    // RAW stores imported/user-provided strings literally and prevents formula injection.
+    valueInputOption: 'RAW',
     data: [
       {
         range: "'الأجهزة والجرد'!A1:K" + (assetRows.length + 1),
@@ -238,7 +239,7 @@ export async function syncDataToGoogleSheet(
   };
 
   const response = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values:batchUpdate`,
     {
       method: 'POST',
       headers: {
@@ -261,7 +262,7 @@ export async function syncDataToGoogleSheet(
     `'بطاقات العهدة'!A${custodyRows.length + 2}:T`,
   ];
   const clearResponse = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchClear`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values:batchClear`,
     {
       method: 'POST',
       headers: {
@@ -291,7 +292,7 @@ export async function fetchSheetValues(
 ): Promise<string[][]> {
   const encodedRange = encodeURIComponent(`${sheetName}!A1:Z500`);
   const response = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodedRange}`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodedRange}`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
