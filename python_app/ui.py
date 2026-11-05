@@ -28,6 +28,20 @@ from .services.excel_service import (
     export_assets_to_excel,
     import_assets_from_excel,
 )
+from .services.workflows import (
+    CustodyItemInput,
+    approve_custody_card,
+    consume_spare_part,
+    create_custody_card,
+    create_spare_part,
+    list_custody_cards,
+    list_maintenance_tickets,
+    list_spare_parts,
+    open_maintenance_ticket,
+    reject_custody_card,
+    return_custody_card,
+    update_maintenance_ticket,
+)
 
 CATEGORY_OPTIONS = {label: code for code, label in CATEGORY_LABELS.items()}
 STATUS_OPTIONS = {
@@ -259,14 +273,20 @@ class AssetInventoryApp:
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True, padx=18, pady=12)
         self.assets_tab = ttk.Frame(self.notebook, padding=12)
+        self.custody_tab = ttk.Frame(self.notebook, padding=12)
+        self.maintenance_tab = ttk.Frame(self.notebook, padding=12)
         self.offices_tab = ttk.Frame(self.notebook, padding=12)
         self.movements_tab = ttk.Frame(self.notebook, padding=12)
         self.excel_tab = ttk.Frame(self.notebook, padding=12)
         self.notebook.add(self.assets_tab, text="الأصول والأجهزة")
+        self.notebook.add(self.custody_tab, text="بطاقات العهدة")
+        self.notebook.add(self.maintenance_tab, text="الصيانة وقطع الغيار")
         self.notebook.add(self.offices_tab, text="المكاتب والمواقع")
         self.notebook.add(self.movements_tab, text="سجل الحركات")
         self.notebook.add(self.excel_tab, text="استيراد وتصدير Excel")
         self._build_assets_tab()
+        self._build_custody_tab()
+        self._build_maintenance_tab()
         self._build_offices_tab()
         self._build_movements_tab()
         self._build_excel_tab()
