@@ -8,7 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "desktop:dev": "concurrently -k \"vite --port=3000\" \"wait-on http://localhost:3000 && electron .\"",
+    "desktop:build": "npm run build && electron-builder --win nsis",
+    "desktop:pack": "npm run build && electron-builder --dir"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -36,6 +39,35 @@
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
-    "@types/express": "^4.17.21"
+    "@types/express": "^4.17.21",
+    "electron": "^41.0.0",
+    "electron-builder": "^26.0.12",
+    "concurrently": "^9.2.1",
+    "wait-on": "^9.0.3"
+  },
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "com.itfix.assets",
+    "productName": "IT Fix - Asset Management",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "IT-Fix-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }
