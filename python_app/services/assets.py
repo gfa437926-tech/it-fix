@@ -175,6 +175,10 @@ def update_asset(session: Session, asset_id: str, data: AssetInput, actor_name: 
             asset = session.get(Asset, asset_id)
             if asset is None:
                 raise ValueError("الأصل المطلوب تعديله غير موجود.")
+            if cleaned.status != asset.status:
+                raise ValueError(
+                    "تغيير حالة الأصل يتم حصراً عبر إجراءات العهدة والصيانة والإرجاع والاستبعاد."
+                )
             if serial_key and session.scalar(
                 select(Asset.id).where(Asset.serial_key == serial_key, Asset.id != asset_id).limit(1)
             ):
