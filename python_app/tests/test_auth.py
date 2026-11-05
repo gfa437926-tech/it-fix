@@ -14,6 +14,7 @@ from python_app.services.auth import (
     reset_user_password,
     list_users,
     set_user_active,
+    set_user_role,
 )
 
 
@@ -214,6 +215,46 @@ def test_admin_cannot_reset_password_for_disabled_account(session: Session) -> N
         reset_user_password(
             session, admin, operator.id, "Temporary-Password-2027!"
         )
+
+
+def test_admin_can_change_user_role_and_audit_the_change(session: Session) -> None:
+    admin = bootstrap_first_admin(session, "rootuser", "مدير النظام", "Secure-Password-2026!")
+    operator = create_user(
+        session, admin, "asset.operator", "مشغل الأصول",
+        "Operator-Password-2026!", "it_manager",
+    )
+
+    promoted = set_user_role(session, admin, operator.id, "admin")
+    assert promoted.role == "admin"
+    assert session.scalar(select(AuditLog).where(
+        AuditLog.entity_type == "app_user",
+        AuditLog.entity_id == operator.id,
+        AuditLog.action == "role_changed",
+    )) is not None
+
+    demoted = set_user_role(session, admin, operator.id, "it_manager")
+    assert demoted.role == "it_manager"
+
+
+def test_last_active_admin_cannot_be_demoted(session: Session) -> None:
+    admin = bootstrap_first_admin(session, "rootuser", "مدير النظام", "Secure-Password-2026!")
+
+    with pytest.raises(ValueError, match="آخر مدير نظام"):
+        set_user_role(session, admin, admin.id, "it_manager")
+
+    assert session.get(AppUser, admin.id).role == "admin"
+
+
+def test_disabled_user_cannot_be_promoted_or_demoted(session: Session) -> None:
+    admin = bootstrap_first_admin(session, "rootuser", "مدير النظام", "Secure-Password-2026!")
+    operator = create_user(
+        session, admin, "asset.operator", "مشغل الأصول",
+        "Operator-Password-2026!", "it_manager",
+    )
+    set_user_active(session, admin, operator.id, False)
+
+    with pytest.raises(ValueError, match="حساب موقوف"):
+        set_user_role(session, admin, operator.id, "admin")
 
 
 def test_last_active_admin_cannot_be_deactivated(session: Session) -> None:
