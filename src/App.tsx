@@ -114,7 +114,7 @@ function MainApp() {
       watchOffices(async (data) => {
         setOffices(data);
         // Seed default offices if completely empty
-        if (data.length === 0) {
+        if (import.meta.env.DEV && data.length === 0) {
           try {
             await saveOffice({
               name: 'المستودع الرئيسي لتقنية المعلومات',
@@ -148,7 +148,7 @@ function MainApp() {
     unsubs.push(
       watchCustodyCards(async (data) => {
         setCustodyCards(data);
-        if (data.length === 0 && user?.uid) {
+        if (import.meta.env.DEV && data.length === 0 && user?.uid) {
           try {
             await saveOfficialCustodyCard(
               {
@@ -237,7 +237,7 @@ function MainApp() {
       watchSpareParts(async (data) => {
         setSpareParts(data);
         // Seed default spare parts if empty
-        if (data.length === 0) {
+        if (import.meta.env.DEV && data.length === 0) {
           try {
             await addSparePart({
               name: 'شاحن كمبيوتر محمول HP Type-C 65W',
