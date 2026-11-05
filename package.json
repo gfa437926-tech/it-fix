@@ -11,7 +11,12 @@
     "lint": "tsc --noEmit",
     "desktop:dev": "concurrently -k \"vite --port=3000\" \"wait-on http://localhost:3000 && electron .\"",
     "desktop:build": "npm run build && electron-builder --win nsis",
-    "desktop:pack": "npm run build && electron-builder --dir"
+    "desktop:pack": "npm run build && electron-builder --dir",
+    "android:sync": "npm run build && cap sync android",
+    "android:open": "cap open android",
+    "android:add": "cap add android",
+    "android:run": "cap run android",
+    "mobile:build": "npm run build && cap sync android"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -28,7 +33,13 @@
     "react-dom": "^19.0.1",
     "recharts": "^3.10.1",
     "vite": "^8.3.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/app": "^7.0.1",
+    "@capacitor/browser": "^7.0.1",
+    "@capacitor/filesystem": "^7.1.4",
+    "@capacitor/share": "^7.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
@@ -43,7 +54,8 @@
     "electron": "^41.0.0",
     "electron-builder": "^26.0.12",
     "concurrently": "^9.2.1",
-    "wait-on": "^9.0.3"
+    "wait-on": "^9.0.3",
+    "@capacitor/cli": "^7.4.3"
   },
   "main": "electron/main.cjs",
   "build": {
