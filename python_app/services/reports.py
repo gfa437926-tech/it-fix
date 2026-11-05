@@ -269,5 +269,23 @@ def export_management_report(session: Session, file_path: str | Path) -> int:
 
     output = Path(file_path)
     output.parent.mkdir(parents=True, exist_ok=True)
-    workbook.save(output)
-    return len(workbook.sheetnames)
+    # Save beside the destination and replace only after the XLSX is complete.
+    import os
+    import tempfile
+
+    sheet_count = len(workbook.sheetnames)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix=f".{output.stem}.", suffix=".tmp.xlsx", dir=output.parent, delete=False
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+        workbook.save(temporary_path)
+        workbook.close()
+        os.replace(temporary_path, output)
+        temporary_path = None
+    finally:
+        workbook.close()
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+    return sheet_count
