@@ -238,13 +238,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setGoogleAccessToken(null);
   };
 
-  // Determine if the currently logged-in user is the Primary Controller
-  // Never treat a missing controller record as permission to administer the system.
-  // The bootstrap account is recognized only by its explicit, configured email.
+  // The controller identity in Firestore is the single source of truth.
+  // A matching email alone must not bypass a controller UID already registered
+  // for another account; this mirrors the Firestore isPrimaryController rule.
   const isPrimaryController =
-    Boolean(user?.uid) &&
-    (primaryControllerUid === user?.uid ||
-      user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
+    Boolean(user?.uid) && primaryControllerUid === user?.uid;
 
   const isAdmin = profile?.role === 'admin' && profile?.isActive === true;
   const isItManager =
