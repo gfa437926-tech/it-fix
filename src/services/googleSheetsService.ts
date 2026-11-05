@@ -37,13 +37,13 @@ export async function createSpreadsheet(
         {
           properties: {
             title: 'الأجهزة والجرد',
-            gridProperties: { rowCount: 100, columnCount: 15 },
+            gridProperties: { rowCount: 1000, columnCount: 20 },
           },
         },
         {
           properties: {
             title: 'بطاقات العهدة',
-            gridProperties: { rowCount: 100, columnCount: 12 },
+            gridProperties: { rowCount: 1000, columnCount: 20 },
           },
         },
       ],
@@ -293,7 +293,9 @@ export async function fetchSheetValues(
   spreadsheetId: string,
   sheetName: string = 'الأجهزة والجرد'
 ): Promise<string[][]> {
-  const encodedRange = encodeURIComponent(`${sheetName}!A1:Z500`);
+  // Quote worksheet names so tabs containing spaces or apostrophes remain valid A1 ranges.
+  const quotedSheetName = `'${sheetName.replace(/'/g, "''")}'`;
+  const encodedRange = encodeURIComponent(`${quotedSheetName}!A1:Z500`);
   const response = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodedRange}`,
     {
