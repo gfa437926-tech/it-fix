@@ -74,7 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'google-sheets',
       label: 'ربط ومزامنة Google Sheets',
       icon: Sheet,
-      badgeText: hasGoogleSheetConnected ? 'متصل' : undefined,
+      badgeText: hasGoogleSheetConnected ? 'مُعدّ' : undefined,
       badgeColor: 'bg-emerald-500 text-white',
       highlight: true,
     },
@@ -186,7 +186,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="truncate">
           <p className="font-semibold text-white">قاعدة البيانات: Firestore</p>
           <p className="text-[11px] text-slate-400 truncate">
-            {hasGoogleSheetConnected ? 'Google Sheets: متزامن' : 'مزامنة Sheets جاهزة'}
+            {hasGoogleSheetConnected ? 'Google Sheets: إعداد محفوظ' : 'Google Sheets: غير مهيأ'}
           </p>
         </div>
       </div>
