@@ -344,9 +344,10 @@ def test_backup_limits_reject_oversized_member() -> None:
 
 def test_backup_limits_reject_excessive_total_expanded_size() -> None:
     infos = [
-        SimpleNamespace(filename="first.bin", file_size=1024 * 1024 * 1024),
-        SimpleNamespace(filename="second.bin", file_size=1024 * 1024 * 1024),
-        SimpleNamespace(filename="third.bin", file_size=1),
+        SimpleNamespace(filename=f"part-{index}.bin", file_size=512 * 1024 * 1024)
+        for index in range(4)
+    ] + [
+        SimpleNamespace(filename="overflow.bin", file_size=1),
     ]
     with pytest.raises(ValueError, match="الإجمالي"):
         _validate_archive_limits(infos)
@@ -356,6 +357,31 @@ def test_backup_limits_reject_oversized_manifest() -> None:
     infos = [SimpleNamespace(filename="manifest.json", file_size=8 * 1024 * 1024 + 1)]
     with pytest.raises(ValueError, match="manifest"):
         _validate_archive_limits(infos)
+
+
+def test_backup_verification_rejects_unmanifested_archive_member(tmp_path: Path) -> None:
+    from python_app.services.backup import verify_backup_archive
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    try:
+        original = tmp_path / "valid.zip"
+        create_backup_archive(
+            original,
+            database_engine=engine,
+            data_directory=tmp_path / "data",
+        )
+        tampered = tmp_path / "with-hidden-file.zip"
+        with zipfile.ZipFile(original, "r") as source, zipfile.ZipFile(tampered, "w") as destination:
+            for item in source.infolist():
+                destination.writestr(item.filename, source.read(item.filename))
+            destination.writestr("data/documents/unlisted-payload.txt", b"not in manifest")
+
+        with pytest.raises(ValueError, match="غير مسجلة في manifest"):
+            verify_backup_archive(tampered)
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
 
 
 def test_backup_limits_accept_normal_archive() -> None:
