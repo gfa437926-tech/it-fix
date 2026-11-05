@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { doc, onSnapshot } from 'firebase/firestore';
 import {
   db,
@@ -41,6 +43,32 @@ function MainApp() {
   const { user, profile, loading: authLoading, signOut } = useAuth();
 
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
+
+  // Native Android back navigation: return to the dashboard before exiting.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') return;
+
+    let active = true;
+    let removeListener: (() => Promise<void>) | undefined;
+
+    void CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      if (currentTab !== 'dashboard') {
+        setCurrentTab('dashboard');
+      } else if (canGoBack) {
+        window.history.back();
+      } else {
+        void CapacitorApp.exitApp();
+      }
+    }).then((listener) => {
+      if (active) removeListener = () => listener.remove();
+      else void listener.remove();
+    });
+
+    return () => {
+      active = false;
+      if (removeListener) void removeListener();
+    };
+  }, [currentTab]);
 
   // Real-time collections
   const [assets, setAssets] = useState<Asset[]>([]);
