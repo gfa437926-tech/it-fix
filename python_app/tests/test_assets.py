@@ -186,3 +186,28 @@ def test_office_duplicate_location_is_rejected(session: Session) -> None:
     create_office(session, "قسم الحاسوب", building="المبنى الرئيسي", room="12")
     with pytest.raises(ValueError, match="مسجل مسبقاً"):
         create_office(session, "قسم الحاسوب", building="المبنى الرئيسي", room="12")
+
+def test_update_asset_cannot_bypass_custody_or_maintenance_status_workflows(
+    session: Session,
+) -> None:
+    asset = create_asset(
+        session, AssetInput("laptop", "Lenovo", "ThinkPad", "STATUS-1")
+    )
+
+    with pytest.raises(ValueError, match="إجراءات العهدة والصيانة"):
+        update_asset(
+            session,
+            asset.id,
+            AssetInput(
+                "laptop", "Lenovo", "ThinkPad", "STATUS-1", status="assigned"
+            ),
+        )
+
+    session.refresh(asset)
+    assert asset.status == "available"
+    assert session.scalar(
+        select(AssetMovement).where(
+            AssetMovement.asset_id == asset.id,
+            AssetMovement.movement_type == "assigned",
+        )
+    ) is None
