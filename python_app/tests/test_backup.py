@@ -203,6 +203,53 @@ def test_restore_replaces_database_and_documents_after_safety_backup(tmp_path: P
         engine.dispose()
 
 
+def test_restore_rolls_back_documents_when_database_install_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import python_app.services.backup as backup_module
+    from python_app.services.backup import restore_sqlite_backup_archive
+
+    database_path = tmp_path / "live-data" / "itfix_assets.db"
+    database_path.parent.mkdir(parents=True)
+    data_dir = tmp_path / "live-data"
+    engine = create_engine(f"sqlite:///{database_path}")
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine)()
+    try:
+        create_asset(session, AssetInput("laptop", "HP", "ProBook", "ROLLBACK-ORIGINAL"))
+        session.commit()
+        source = tmp_path / "rollback-source.zip"
+        create_backup_archive(source, database_engine=engine, data_directory=data_dir)
+
+        original_documents = data_dir / "documents"
+        original_documents.mkdir(parents=True)
+        (original_documents / "keep.txt").write_text("original live document", encoding="utf-8")
+        session.close()
+
+        real_replace = backup_module.os.replace
+
+        def fail_database_install(src: str | Path, dst: str | Path) -> None:
+            if Path(dst).resolve() == database_path.resolve() and ".itfix-database-restore-" in str(src):
+                raise OSError("simulated database replacement failure")
+            real_replace(src, dst)
+
+        monkeypatch.setattr(backup_module.os, "replace", fail_database_install)
+        with pytest.raises(OSError, match="simulated database replacement failure"):
+            restore_sqlite_backup_archive(
+                source,
+                database_engine=engine,
+                data_directory=data_dir,
+                confirmed=True,
+                safety_backup_path=tmp_path / "rollback-safety.zip",
+            )
+
+        assert (data_dir / "documents" / "keep.txt").read_text(encoding="utf-8") == "original live document"
+        with sqlite3.connect(database_path) as connection:
+            serials = connection.execute("select serial_number from assets").fetchall()
+        assert serials == [("ROLLBACK-ORIGINAL",)]
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_restore_requires_explicit_confirmation(tmp_path: Path) -> None:
     from python_app.services.backup import restore_sqlite_backup_archive
 
