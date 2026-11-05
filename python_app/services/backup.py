@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import shutil
@@ -205,11 +206,10 @@ class RestoreResult:
 
 
 def _safe_zip_member(name: str) -> bool:
-    if not name or "\\\\" in name or "\\x00" in name:
+    if not name or "\\\\" in name or "\\x00" in name or ":" in name or name.startswith("/"):
         return False
-    path = Path(name)
     parts = name.split("/")
-    return not path.is_absolute() and all(part not in {"", ".", ".."} for part in parts)
+    return all(part not in {"", ".", ".."} for part in parts)
 
 
 def _zip_member_digest(archive: zipfile.ZipFile, member: str) -> tuple[int, str]:
@@ -262,7 +262,7 @@ def verify_backup_archive(archive_path: str | Path) -> BackupVerificationResult:
             database_bytes, database_hash = _zip_member_digest(archive, database_member)
             if database_bytes != manifest.get("database_size_bytes"):
                 raise ValueError("حجم ملف قاعدة البيانات لا يطابق manifest.")
-            if not hashlib.compare_digest(database_hash, str(manifest.get("database_sha256", ""))):
+            if not hmac.compare_digest(database_hash, str(manifest.get("database_sha256", ""))):
                 raise ValueError("بصمة قاعدة البيانات لا تطابق manifest.")
 
             attachments = manifest.get("attachments")
