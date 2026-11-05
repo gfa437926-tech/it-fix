@@ -131,6 +131,17 @@ Before exporting a full inventory snapshot, the integration reads the grid dimen
 
 ## Standalone Python edition
 
-A separate Arabic-first Python desktop edition is being developed in `python_app/`. It does not change or replace the existing React/Firebase application. The current Python build includes the asset register, office locations, movement and retirement records, plus validated Excel import/export.
+A separate Arabic-first Python desktop edition is available in `python_app/`. It does not replace or connect automatically to the existing React/Firebase application.
 
-See [python_app/README.md](python_app/README.md) for Windows setup, local SQLite mode, native PostgreSQL setup without Docker, and current limitations. The Python version is still under development; user authentication, custody cards, maintenance, spare parts, purchase records and attachments have not yet been ported.
+The current Python edition includes:
+- Asset register, offices, movements, retirement and audit history.
+- Multi-item custody cards with approval, rejection and return workflows.
+- Maintenance tickets, spare-parts stock and transactional parts consumption.
+- Purchase invoices and warranty history linked to assets.
+- Local asset attachments (PDF, PNG, JPG and TXT) with size/type validation.
+- Local user sign-in, first-run administrator setup, password hashing, temporary lockout and administrator-only user management.
+- Arabic Excel import/export with validation and duplicate detection.
+
+The Python edition remains a separate local desktop deployment. Its local user accounts are not Firebase accounts; detailed office-scoped permissions, central identity, advanced reports, external synchronization, backup/restore and final production acceptance remain outstanding.
+
+See [python_app/README.md](python_app/README.md) for Windows setup, SQLite/PostgreSQL configuration, the standalone EXE build and the current limitations.
