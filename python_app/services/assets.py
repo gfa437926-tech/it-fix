@@ -130,10 +130,9 @@ def list_assets(session: Session, search: str = "", status: str = "all") -> list
 def create_asset(session: Session, data: AssetInput, actor_name: str = "المسؤول") -> Asset:
     cleaned = validate_asset(data)
     serial, serial_key = normalize_serial(cleaned.serial_number)
-    office = _find_office(session, cleaned.office_id, cleaned.office_name)
-
     try:
         with session.begin():
+            office = _find_office(session, cleaned.office_id, cleaned.office_name)
             if serial_key and session.scalar(
                 select(Asset.id).where(Asset.serial_key == serial_key).limit(1)
             ):
@@ -170,10 +169,9 @@ def create_asset(session: Session, data: AssetInput, actor_name: str = "المس
 def update_asset(session: Session, asset_id: str, data: AssetInput, actor_name: str = "المسؤول") -> Asset:
     cleaned = validate_asset(data)
     serial, serial_key = normalize_serial(cleaned.serial_number)
-    office = _find_office(session, cleaned.office_id, cleaned.office_name)
-
     try:
         with session.begin():
+            office = _find_office(session, cleaned.office_id, cleaned.office_name)
             asset = session.get(Asset, asset_id)
             if asset is None:
                 raise ValueError("الأصل المطلوب تعديله غير موجود.")
