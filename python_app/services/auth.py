@@ -204,6 +204,11 @@ def _require_active_admin(session: Session, actor: AppUser) -> AppUser:
     return current_actor
 
 
+def require_active_admin(session: Session, actor: AppUser) -> AppUser:
+    """Return the current database-backed admin record or reject stale sessions."""
+    return _require_active_admin(session, actor)
+
+
 def create_user(
     session: Session,
     actor: AppUser,
