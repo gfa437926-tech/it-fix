@@ -70,8 +70,8 @@ def test_purchase_record_links_to_asset_and_writes_audit(session: Session) -> No
         ({"supplier": "مورد", "invoice_number": " "}, "رقم الفاتورة مطلوب"),
         ({"supplier": "مورد", "invoice_number": "I-1", "purchase_date": "01/10/2026"}, "بصيغة YYYY-MM-DD"),
         ({"supplier": "مورد", "invoice_number": "I-1", "warranty_until": "2026-09-30"}, "لا يمكن أن يسبق"),
-        ({"supplier": "مورد", "invoice_number": "I-1", "total_cost": -1}, "موجبة أو صفراً"),
-        ({"supplier": "مورد", "invoice_number": "I-1", "total_cost": float("inf")}, "موجبة أو صفراً"),
+        ({"supplier": "مورد", "invoice_number": "I-1", "total_cost": -1}, "قيمة الفاتورة"),
+        ({"supplier": "مورد", "invoice_number": "I-1", "total_cost": float("inf")}, "قيمة الفاتورة"),
     ],
 )
 def test_purchase_record_rejects_invalid_business_values(
