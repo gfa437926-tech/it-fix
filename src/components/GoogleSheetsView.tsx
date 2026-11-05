@@ -136,12 +136,18 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
     setSuccessMessage('');
 
     try {
-      // Extract spreadsheet ID from URL or bare ID
-      let id = customSheetUrl.trim();
-      const match = customSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-      if (match && match[1]) {
-        id = match[1];
+      // Accept a spreadsheet URL or ID, but never persist an unverified value.
+      const input = customSheetUrl.trim();
+      const match = input.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+      const id = match?.[1] || input;
+      if (!/^[a-zA-Z0-9_-]{20,}$/.test(id)) {
+        throw new Error('رابط أو معرّف Google Sheets غير صالح. تحقق من الرابط ثم أعد المحاولة.');
       }
+
+      // A successful API read proves that the supplied token can access this sheet.
+      // Linking is not a data sync, so do not stamp a fake lastSyncedAt value.
+      const token = await ensureToken();
+      await fetchSheetValues(token, id);
 
       const url = `https://docs.google.com/spreadsheets/d/${id}/edit`;
       const sheetInfo: GoogleSpreadsheetInfo = {
@@ -150,19 +156,19 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
         title: 'جدول البيانات المرتبط',
       };
 
-      const now = new Date().toISOString();
       await setDoc(doc(db, 'system_settings', 'google_sheets'), {
         ...sheetInfo,
-        lastSyncedAt: now,
-        syncedBy: profile?.displayName || user?.email,
+        lastSyncedAt: null,
+        linkedBy: profile?.displayName || user?.email || null,
+        linkedAt: new Date().toISOString(),
       });
 
       setConnectedSheet(sheetInfo);
-      setLastSyncedAt(now);
-      setSyncedBy(profile?.displayName || user?.email || 'المتحكم');
+      setLastSyncedAt(null);
+      setSyncedBy(null);
       setIsLinkingManual(false);
       setCustomSheetUrl('');
-      setSuccessMessage('تم ربط جدول البيانات بنجاح!');
+      setSuccessMessage('تم التحقق من صلاحية الوصول وربط جدول البيانات. لم تتم مزامنة البيانات بعد.');
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'تعذر ربط جدول البيانات');
     } finally {
