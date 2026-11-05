@@ -74,7 +74,9 @@ def export_audit_logs_to_csv(
         for row in rows:
             timestamp = row.occurred_at
             if timestamp.tzinfo is None:
-                timestamp_text = timestamp.isoformat() + " (naive)"
+                # SQLite stores timezone-aware UTC values without tzinfo.
+                # All application event timestamps are created in UTC.
+                timestamp_text = timestamp.replace(tzinfo=timezone.utc).isoformat()
             else:
                 timestamp_text = timestamp.astimezone(timezone.utc).isoformat()
             writer.writerow([
