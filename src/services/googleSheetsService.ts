@@ -57,6 +57,49 @@ export async function createSpreadsheet(
 }
 
 /**
+ * Read spreadsheet metadata and verify that the integration's required tabs exist.
+ * This validates both the spreadsheet ID and the caller's access without assuming
+ * that a particular range is already populated.
+ */
+export async function getSpreadsheetInfo(
+  accessToken: string,
+  spreadsheetId: string
+): Promise<GoogleSpreadsheetInfo> {
+  const response = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=spreadsheetId,spreadsheetUrl,properties.title,sheets.properties.title`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData?.error?.message || 'تعذر الوصول إلى جدول Google Sheets أو لا تملك صلاحية فتحه');
+  }
+
+  const data = await response.json();
+  const availableTabs = (data.sheets || [])
+    .map((sheet: { properties?: { title?: string } }) => sheet.properties?.title)
+    .filter((title: string | undefined): title is string => Boolean(title));
+  const requiredTabs = ['الأجهزة والجرد', 'بطاقات العهدة'];
+  const missingTabs = requiredTabs.filter((title) => !availableTabs.includes(title));
+
+  if (missingTabs.length > 0) {
+    throw new Error(
+      `تم الوصول إلى الجدول، لكن تنقصه الأوراق التالية المطلوبة للمزامنة: ${missingTabs.join('، ')}. أضفها بالأسماء نفسها ثم أعد الربط.`
+    );
+  }
+
+  return {
+    spreadsheetId: data.spreadsheetId,
+    spreadsheetUrl: data.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${data.spreadsheetId}/edit`,
+    title: data.properties?.title || 'جدول Google Sheets',
+  };
+}
+
+/**
  * Push all assets and custody cards to the Google Spreadsheet
  */
 export async function syncDataToGoogleSheet(
