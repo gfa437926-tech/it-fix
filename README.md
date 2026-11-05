@@ -139,9 +139,11 @@ The current Python edition includes:
 - Maintenance tickets, spare-parts stock and transactional parts consumption.
 - Purchase invoices and warranty history linked to assets.
 - Local asset attachments (PDF, PNG, JPG and TXT) with size/type validation.
-- Local user sign-in, first-run administrator setup, password hashing, temporary lockout and administrator-only user management.
+- Local user sign-in, first-run administrator setup, scrypt password hashing, temporary lockout and administrator-only user management.
+- Searchable audit history with CSV export and spreadsheet-formula protection.
+- Multi-sheet XLSX management report covering summary, assets, offices, custody cards/items, maintenance, spare parts, purchases, attachments, movements and audit events.
 - Arabic Excel import/export with validation and duplicate detection.
 
-The Python edition remains a separate local desktop deployment. Its local user accounts are not Firebase accounts; detailed office-scoped permissions, central identity, advanced reports, external synchronization, backup/restore and final production acceptance remain outstanding.
+The Python edition remains a separate local desktop deployment. Its local user accounts are not Firebase accounts; detailed office-scoped permissions, central identity, advanced time-series/financial analytics, external synchronization, backup/restore and final production acceptance remain outstanding.
 
 See [python_app/README.md](python_app/README.md) for Windows setup, SQLite/PostgreSQL configuration, the standalone EXE build and the current limitations.
