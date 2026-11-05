@@ -801,6 +801,8 @@ class AssetInventoryApp:
         self.status_var.set(message)
 
     def refresh_all(self) -> None:
+        if not self._ensure_active_session():
+            return
         self.refresh_dashboard()
         self.refresh_assets()
         self.refresh_custody()
@@ -815,6 +817,8 @@ class AssetInventoryApp:
         self.refresh_movements()
 
     def refresh_dashboard(self) -> None:
+        if not self._ensure_active_session():
+            return
         with SessionLocal() as session:
             summary = get_dashboard_summary(session)
         for key, value in summary.__dict__.items() if hasattr(summary, "__dict__") else [
@@ -824,6 +828,8 @@ class AssetInventoryApp:
                 self.stat_values[key].configure(text=str(value))
 
     def refresh_assets(self) -> None:
+        if not self._ensure_active_session():
+            return
         with SessionLocal() as session:
             assets = list_assets(
                 session, self.asset_search.get() if hasattr(self, "asset_search") else "",
@@ -845,6 +851,8 @@ class AssetInventoryApp:
         self._set_status(f"عدد الأصول المعروضة: {len(assets)}")
 
     def refresh_offices(self) -> None:
+        if not self._ensure_active_session():
+            return
         with SessionLocal() as session:
             offices = list_offices(session)
         self.offices_tree.delete(*self.offices_tree.get_children())
@@ -856,6 +864,8 @@ class AssetInventoryApp:
             ))
 
     def refresh_movements(self) -> None:
+        if not self._ensure_active_session():
+            return
         with SessionLocal() as session:
             movements = list_recent_movements(session, 200)
         self.movements_tree.delete(*self.movements_tree.get_children())
@@ -874,6 +884,8 @@ class AssetInventoryApp:
             ))
 
     def refresh_custody(self) -> None:
+        if not self._ensure_active_session():
+            return
         if not hasattr(self, "custody_tree"):
             return
         with SessionLocal() as session:
@@ -889,6 +901,8 @@ class AssetInventoryApp:
             ))
 
     def refresh_maintenance(self) -> None:
+        if not self._ensure_active_session():
+            return
         if not hasattr(self, "maintenance_tree"):
             return
         with SessionLocal() as session:
@@ -916,6 +930,8 @@ class AssetInventoryApp:
                 self.maintenance_ticket_choice.set(options[0] if options else "")
 
     def refresh_spare_parts(self) -> None:
+        if not self._ensure_active_session():
+            return
         if not hasattr(self, "spare_parts_tree"):
             return
         with SessionLocal() as session:
@@ -931,6 +947,8 @@ class AssetInventoryApp:
         self.spare_parts_tree.tag_configure("low", background="#fff0e8")
 
     def refresh_purchases(self) -> None:
+        if not self._ensure_active_session():
+            return
         if not hasattr(self, "purchases_tree"):
             return
         with SessionLocal() as session:
@@ -962,6 +980,8 @@ class AssetInventoryApp:
             ))
 
     def refresh_documents(self) -> None:
+        if not self._ensure_active_session():
+            return
         if not hasattr(self, "documents_tree"):
             return
         with SessionLocal() as session:
@@ -1003,6 +1023,8 @@ class AssetInventoryApp:
             ))
 
     def attach_document(self) -> None:
+        if not self._ensure_active_session():
+            return
         asset_label = self.document_asset_choice.get()
         asset_id = getattr(self, "_document_asset_ids", {}).get(asset_label)
         if not asset_id:
@@ -1047,6 +1069,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر إرفاق المستند", str(exc), parent=self.root)
 
     def open_selected_document(self) -> None:
+        if not self._ensure_active_session():
+            return
         selected = self.documents_tree.selection()
         if not selected:
             messagebox.showinfo("فتح المرفق", "حدد مستنداً من الجدول أولاً.", parent=self.root)
@@ -1062,6 +1086,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر فتح المرفق", str(exc), parent=self.root)
 
     def refresh_audit(self) -> None:
+        if not self._ensure_active_session(admin_only=True):
+            return
         if self.user.role != "admin" or not hasattr(self, "audit_tree"):
             return
         entity_type = self.audit_entity_filter.get()
@@ -1101,6 +1127,8 @@ class AssetInventoryApp:
             self.report_status.set(f"تم تحميل {len(rows)} سجل تدقيق.")
 
     def export_audit_csv(self) -> None:
+        if not self._ensure_active_session(admin_only=True):
+            return
         if self.user.role != "admin":
             messagebox.showerror("غير مسموح", "تصدير سجل التدقيق يتطلب صلاحية مدير النظام.", parent=self.root)
             return
@@ -1135,6 +1163,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر تصدير السجل", str(exc), parent=self.root)
 
     def export_management_report(self) -> None:
+        if not self._ensure_active_session(admin_only=True):
+            return
         if self.user.role != "admin":
             messagebox.showerror("غير مسموح", "إنشاء التقرير الشامل يتطلب صلاحية مدير النظام.", parent=self.root)
             return
@@ -1163,6 +1193,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر إنشاء التقرير", str(exc), parent=self.root)
 
     def create_full_backup(self) -> None:
+        if not self._ensure_active_session(admin_only=True):
+            return
         if self.user.role != "admin":
             messagebox.showerror(
                 "غير مسموح",
@@ -1209,6 +1241,8 @@ class AssetInventoryApp:
             )
 
     def refresh_users(self) -> None:
+        if not self._ensure_active_session(admin_only=True):
+            return
         if not hasattr(self, "users_tree") or self.user.role != "admin":
             return
         with SessionLocal() as session:
@@ -1231,6 +1265,8 @@ class AssetInventoryApp:
             ))
 
     def add_local_user(self) -> None:
+        if not self._ensure_active_session(admin_only=True):
+            return
         if self.user.role != "admin":
             messagebox.showerror("غير مسموح", "إنشاء المستخدمين يتطلب صلاحية مدير النظام.", parent=self.root)
             return
@@ -1274,6 +1310,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر إنشاء الحساب", str(exc), parent=self.root)
 
     def toggle_selected_user(self) -> None:
+        if not self._ensure_active_session(admin_only=True):
+            return
         selected = self.users_tree.selection() if hasattr(self, "users_tree") else ()
         if not selected:
             messagebox.showinfo("تحديد مستخدم", "حدد حساباً من الجدول أولاً.", parent=self.root)
@@ -1305,6 +1343,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر تغيير حالة الحساب", str(exc), parent=self.root)
 
     def change_password(self) -> None:
+        if not self._ensure_active_session():
+            return
         current = simpledialog.askstring(
             "تغيير كلمة المرور", "كلمة المرور الحالية:", show="*", parent=self.root
         )
@@ -1362,6 +1402,8 @@ class AssetInventoryApp:
             return session.get(SparePart, selected[0])
 
     def add_custody_card(self) -> None:
+        if not self._ensure_active_session():
+            return
         with SessionLocal() as session:
             offices = list_offices(session, active_only=True)
             available_assets = [
@@ -1484,6 +1526,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر إنشاء البطاقة", str(exc), parent=self.root)
 
     def approve_selected_custody(self) -> None:
+        if not self._ensure_active_session():
+            return
         card = self._selected_custody()
         if card is None:
             return
@@ -1496,6 +1540,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر الاعتماد", str(exc), parent=self.root)
 
     def reject_selected_custody(self) -> None:
+        if not self._ensure_active_session():
+            return
         card = self._selected_custody()
         if card is None:
             return
@@ -1511,6 +1557,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر الرفض", str(exc), parent=self.root)
 
     def return_selected_custody(self) -> None:
+        if not self._ensure_active_session():
+            return
         card = self._selected_custody()
         if card is None:
             return
@@ -1524,6 +1572,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر الإرجاع", str(exc), parent=self.root)
 
     def add_maintenance_ticket(self) -> None:
+        if not self._ensure_active_session():
+            return
         with SessionLocal() as session:
             assets = [
                 asset for asset in list_assets(session)
@@ -1572,6 +1622,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر فتح الطلب", str(exc), parent=self.root)
 
     def start_selected_maintenance(self) -> None:
+        if not self._ensure_active_session():
+            return
         ticket = self._selected_maintenance()
         if ticket is None:
             return
@@ -1585,6 +1637,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر تحديث الطلب", str(exc), parent=self.root)
 
     def complete_selected_maintenance(self) -> None:
+        if not self._ensure_active_session():
+            return
         ticket = self._selected_maintenance()
         if ticket is None:
             return
@@ -1605,6 +1659,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر إكمال الصيانة", str(exc), parent=self.root)
 
     def cancel_selected_maintenance(self) -> None:
+        if not self._ensure_active_session():
+            return
         ticket = self._selected_maintenance()
         if ticket is None:
             return
@@ -1618,6 +1674,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر إلغاء الطلب", str(exc), parent=self.root)
 
     def add_purchase_record(self) -> None:
+        if not self._ensure_active_session():
+            return
         asset_label = self.purchase_asset_choice.get()
         asset_id = getattr(self, "_purchase_asset_ids", {}).get(asset_label)
         if not asset_id:
@@ -1671,6 +1729,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر تسجيل الفاتورة", str(exc), parent=self.root)
 
     def add_spare_part(self) -> None:
+        if not self._ensure_active_session():
+            return
         name = simpledialog.askstring("قطعة غيار", "اسم القطعة:", parent=self.root)
         if not name:
             return
@@ -1701,6 +1761,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر حفظ القطعة", str(exc), parent=self.root)
 
     def consume_selected_spare_part(self) -> None:
+        if not self._ensure_active_session():
+            return
         part = self._selected_spare_part()
         if part is None:
             return
@@ -1733,6 +1795,8 @@ class AssetInventoryApp:
             return session.get(Asset, selected[0])
 
     def add_asset(self) -> None:
+        if not self._ensure_active_session():
+            return
         with SessionLocal() as session:
             offices = list_offices(session, active_only=True)
         dialog = AssetDialog(self.root, offices)
@@ -1748,6 +1812,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر الحفظ", str(exc), parent=self.root)
 
     def edit_asset(self) -> None:
+        if not self._ensure_active_session():
+            return
         asset = self._selected_asset()
         if asset is None:
             return
@@ -1766,6 +1832,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر التعديل", str(exc), parent=self.root)
 
     def transfer_selected_asset(self) -> None:
+        if not self._ensure_active_session():
+            return
         asset = self._selected_asset()
         if asset is None:
             return
@@ -1800,6 +1868,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر النقل", str(exc), parent=self.root)
 
     def retire_selected_asset(self) -> None:
+        if not self._ensure_active_session():
+            return
         asset = self._selected_asset()
         if asset is None:
             return
@@ -1815,6 +1885,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر الاستبعاد", str(exc), parent=self.root)
 
     def add_office(self) -> None:
+        if not self._ensure_active_session():
+            return
         dialog = OfficeDialog(self.root)
         self.root.wait_window(dialog)
         if dialog.result is None:
@@ -1836,6 +1908,8 @@ class AssetInventoryApp:
             return session.get(Office, selected[0])
 
     def edit_office(self) -> None:
+        if not self._ensure_active_session():
+            return
         office = self._selected_office()
         if office is None:
             return
@@ -1852,6 +1926,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر تعديل المكتب", str(exc), parent=self.root)
 
     def toggle_selected_office(self) -> None:
+        if not self._ensure_active_session():
+            return
         office = self._selected_office()
         if office is None:
             return
@@ -1871,6 +1947,8 @@ class AssetInventoryApp:
             messagebox.showerror("تعذر تغيير حالة المكتب", str(exc), parent=self.root)
 
     def import_excel(self) -> None:
+        if not self._ensure_active_session():
+            return
         path = filedialog.askopenfilename(
             parent=self.root, title="اختر ملف Excel",
             filetypes=[("Excel workbook", "*.xlsx *.xlsm")],
@@ -1898,6 +1976,8 @@ class AssetInventoryApp:
             messagebox.showerror("فشل الاستيراد", str(exc), parent=self.root)
 
     def export_excel(self) -> None:
+        if not self._ensure_active_session():
+            return
         path = filedialog.asksaveasfilename(
             parent=self.root, title="حفظ ملف جرد الأصول",
             defaultextension=".xlsx", initialfile="ITFix-Assets.xlsx",
@@ -1913,6 +1993,8 @@ class AssetInventoryApp:
             messagebox.showerror("فشل التصدير", str(exc), parent=self.root)
 
     def export_template(self) -> None:
+        if not self._ensure_active_session():
+            return
         path = filedialog.asksaveasfilename(
             parent=self.root, title="حفظ قالب الاستيراد",
             defaultextension=".xlsx", initialfile="ITFix-Import-Template.xlsx",
