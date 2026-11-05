@@ -253,6 +253,32 @@ export async function syncDataToGoogleSheet(
     const errorData = await response.json();
     throw new Error(errorData?.error?.message || 'تعذر إرسال البيانات إلى Google Sheets');
   }
+
+  // The app exports a full snapshot. Remove leftover rows from a previous,
+  // larger export so deleted assets/custody items do not remain in the sheet.
+  const clearRanges = [
+    `'الأجهزة والجرد'!A${assetRows.length + 2}:K10000`,
+    `'بطاقات العهدة'!A${custodyRows.length + 2}:T10000`,
+  ];
+  const clearResponse = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchClear`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ranges: clearRanges }),
+    }
+  );
+
+  if (!clearResponse.ok) {
+    const errorData = await clearResponse.json().catch(() => ({}));
+    throw new Error(
+      errorData?.error?.message ||
+      'تم إرسال البيانات، لكن تعذر تنظيف الصفوف القديمة الزائدة في Google Sheets. أعد المزامنة.'
+    );
+  }
 }
 
 /**
