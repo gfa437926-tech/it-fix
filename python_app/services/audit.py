@@ -55,9 +55,17 @@ def export_audit_logs_to_csv(
     destination: str | Path,
     *,
     search: str = "",
+    entity_type: str = "",
+    action: str = "",
     limit: int = 10000,
 ) -> int:
-    rows = list_audit_logs(session, search=search, limit=limit)
+    rows = list_audit_logs(
+        session,
+        search=search,
+        entity_type=entity_type,
+        action=action,
+        limit=limit,
+    )
     target = Path(destination)
     target.parent.mkdir(parents=True, exist_ok=True)
 
