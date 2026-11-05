@@ -283,6 +283,7 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
     let updated = 0;
     let failed = 0;
     const errors: string[] = [];
+    const appliedSerials = new Set<string>();
 
     for (const row of rows) {
       if (row.error) {
@@ -293,6 +294,20 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
       // Filter by execution mode
       if (mode === 'new_only' && row.isExisting) continue;
       if (mode === 'updates_only' && !row.isExisting) continue;
+
+      // Revalidate editable preview values immediately before writing.
+      const normalizedSerial = row.serialNumber.trim().toUpperCase();
+      if (!row.brand.trim() || !row.model.trim() || !normalizedSerial) {
+        failed++;
+        errors.push(`السطر ${row.rowIndex}: الشركة والموديل والرقم التسلسلي حقول إلزامية`);
+        continue;
+      }
+      if (appliedSerials.has(normalizedSerial)) {
+        failed++;
+        errors.push(`السطر ${row.rowIndex}: الرقم التسلسلي (${normalizedSerial}) مكرر ضمن الصفوف المحددة للتطبيق`);
+        continue;
+      }
+      appliedSerials.add(normalizedSerial);
 
       try {
         if (row.isExisting && row.existingAssetId) {
