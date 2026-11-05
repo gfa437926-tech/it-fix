@@ -8,6 +8,7 @@ on:
       - "src/**"
       - "public/**"
       - "package.json"
+      - "firebase-applet-config.json"
       - "capacitor.config.ts"
       - "vite.config.ts"
       - "tsconfig*.json"
