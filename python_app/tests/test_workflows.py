@@ -142,17 +142,20 @@ def test_maintenance_restores_previous_asset_status_and_records_resolution(sessi
     assert {"maintenance_opened", "maintenance_completed"} <= movement_types
 
 
-def test_maintenance_restores_assigned_status_after_repair(session: Session) -> None:
+def test_maintenance_rejects_asset_still_assigned_to_employee(session: Session) -> None:
     asset = create_asset(session, AssetInput(
         "desktop", "Dell", "OptiPlex", "DEL-ASSIGNED", status="assigned"
     ))
-    ticket = open_maintenance_ticket(
-        session, asset.id, "عطل مزود الطاقة", "الجهاز لا يعمل"
-    )
-    update_maintenance_ticket(
-        session, ticket.id, "completed", resolution="تم تبديل مزود الطاقة"
-    )
+
+    with pytest.raises(ValueError, match="إغلاق بطاقة العهدة وإرجاعه"):
+        open_maintenance_ticket(
+            session, asset.id, "عطل مزود الطاقة", "الجهاز لا يعمل"
+        )
+
     assert session.get(Asset, asset.id).status == "assigned"
+    assert session.scalar(select(MaintenanceRecord.id).where(
+        MaintenanceRecord.asset_id == asset.id
+    )) is None
 
 
 def test_spare_part_consumption_updates_stock_and_maintenance_cost(session: Session) -> None:
