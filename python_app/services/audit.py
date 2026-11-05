@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
+from datetime import timezone
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -75,7 +76,7 @@ def export_audit_logs_to_csv(
             if timestamp.tzinfo is None:
                 timestamp_text = timestamp.isoformat() + " (naive)"
             else:
-                timestamp_text = timestamp.astimezone().isoformat()
+                timestamp_text = timestamp.astimezone(timezone.utc).isoformat()
             writer.writerow([
                 _safe_csv_text(timestamp_text),
                 _safe_csv_text(row.entity_type),
