@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import {
   User,
   onAuthStateChanged,
   signInWithPopup,
+  signInWithCredential,
   signOut as fbSignOut,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -143,9 +146,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithGoogle = async (): Promise<string | null> => {
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      const token = credential?.accessToken || null;
+      let token: string | null = null;
+      if (Capacitor.isNativePlatform()) {
+        const nativeResult = await FirebaseAuthentication.signInWithGoogle();
+        const idToken = nativeResult.credential?.idToken;
+        if (!idToken) throw new Error('لم يُرجع Google رمز الهوية. تحقق من إعداد SHA-1 وملف google-services.json.');
+        const credential = GoogleAuthProvider.credential(idToken);
+        await signInWithCredential(auth, credential);
+        token = nativeResult.credential?.accessToken || null;
+      } else {
+        const result = await signInWithPopup(auth, googleProvider);
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        token = credential?.accessToken || null;
+      }
       if (token) {
         inMemoryAccessToken = token;
         setGoogleAccessToken(token);
@@ -166,9 +179,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const requestGoogleAccessToken = async (): Promise<string | null> => {
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      const token = credential?.accessToken || null;
+      let token: string | null = null;
+      if (Capacitor.isNativePlatform()) {
+        const nativeResult = await FirebaseAuthentication.signInWithGoogle();
+        const idToken = nativeResult.credential?.idToken;
+        if (!idToken) throw new Error('لم يُرجع Google رمز الهوية. تحقق من إعداد SHA-1 وملف google-services.json.');
+        const credential = GoogleAuthProvider.credential(idToken);
+        await signInWithCredential(auth, credential);
+        token = nativeResult.credential?.accessToken || null;
+      } else {
+        const result = await signInWithPopup(auth, googleProvider);
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        token = credential?.accessToken || null;
+      }
       if (token) {
         inMemoryAccessToken = token;
         setGoogleAccessToken(token);
@@ -199,6 +222,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
+    if (Capacitor.isNativePlatform()) {
+      await FirebaseAuthentication.signOut().catch((error) => {
+        console.warn('Native Firebase sign-out failed:', error);
+      });
+    }
     await fbSignOut(auth);
     inMemoryAccessToken = null;
     setGoogleAccessToken(null);
