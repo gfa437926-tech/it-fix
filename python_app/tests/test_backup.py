@@ -12,7 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from python_app.models import Base
 from python_app.services.assets import AssetInput, create_asset
-from python_app.services.backup import create_backup_archive
+from python_app.services.backup import create_backup_archive, _safe_zip_member
 from python_app.services.documents import attach_asset_document
 
 
@@ -310,3 +310,19 @@ def test_restore_rejects_archive_inside_documents_that_will_be_replaced(tmp_path
         assert archive_inside_documents.is_file()
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        "data/documents/..\\\\escape.txt",
+        "data/documents/sub\\\\file.txt",
+        "data/documents/file\x00name.txt",
+    ],
+)
+def test_backup_member_validation_rejects_windows_separators_and_null_bytes(member: str) -> None:
+    assert _safe_zip_member(member) is False
+
+
+def test_backup_member_validation_accepts_safe_posix_relative_path() -> None:
+    assert _safe_zip_member("data/documents/2026/invoice.pdf") is True
