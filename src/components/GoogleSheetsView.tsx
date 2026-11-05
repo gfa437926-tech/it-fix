@@ -19,7 +19,7 @@ import { Asset, CustodyRecord } from '../types';
 import {
   createSpreadsheet,
   syncDataToGoogleSheet,
-  fetchSheetValues,
+  getSpreadsheetInfo,
   GoogleSpreadsheetInfo,
 } from '../services/googleSheetsService';
 import { createAsset, updateAsset } from '../services/assetService';
@@ -144,17 +144,10 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
         throw new Error('رابط أو معرّف Google Sheets غير صالح. تحقق من الرابط ثم أعد المحاولة.');
       }
 
-      // A successful API read proves that the supplied token can access this sheet.
+      // Validate the spreadsheet and the exact tabs required by the sync service.
       // Linking is not a data sync, so do not stamp a fake lastSyncedAt value.
       const token = await ensureToken();
-      await fetchSheetValues(token, id);
-
-      const url = `https://docs.google.com/spreadsheets/d/${id}/edit`;
-      const sheetInfo: GoogleSpreadsheetInfo = {
-        spreadsheetId: id,
-        spreadsheetUrl: url,
-        title: 'جدول البيانات المرتبط',
-      };
+      const sheetInfo: GoogleSpreadsheetInfo = await getSpreadsheetInfo(token, id);
 
       await setDoc(doc(db, 'system_settings', 'google_sheets'), {
         ...sheetInfo,
