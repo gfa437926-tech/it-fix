@@ -149,6 +149,7 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
       }
     });
 
+    const firstRowBySerial = new Map<string, number>();
     const parsed: EditableImportRow[] = rawRows.map((raw, idx) => {
       const rowIndex = idx + 2;
 
@@ -206,6 +207,10 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
         error = 'اسم الشركة والموديل مطلوبان';
       } else if (!serialNumber) {
         error = 'الرقم التسلسلي مطلوب';
+      } else if (firstRowBySerial.has(serialNumber)) {
+        error = `الرقم التسلسلي مكرر داخل الملف (ظهر أولاً في السطر ${firstRowBySerial.get(serialNumber)})`;
+      } else {
+        firstRowBySerial.set(serialNumber, rowIndex);
       }
 
       // Check if existing asset matches this serial
@@ -410,10 +415,14 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
               <CheckCircle2 className="w-7 h-7 text-emerald-600" />
               <div>
                 <h4 className="font-bold text-base text-slate-900">
-                  تم تنفيذ العملية وتحديث قاعدة البيانات بنجاح!
+                  {resultSummary.failed > 0
+                    ? 'اكتملت العملية مع وجود سجلات لم تُحفظ'
+                    : 'تم تنفيذ العملية وتحديث قاعدة البيانات بنجاح'}
                 </h4>
                 <p className="text-xs text-slate-600">
-                  تم حفظ كافة التغييرات والبطاقات في منظومة الأصول السحابية
+                  {resultSummary.failed > 0
+                    ? 'راجع تفاصيل الأخطاء أدناه قبل إعادة استيراد السجلات المتبقية'
+                    : 'تم حفظ التغييرات والبطاقات في منظومة الأصول السحابية'}
                 </p>
               </div>
             </div>
