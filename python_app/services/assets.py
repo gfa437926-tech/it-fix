@@ -309,6 +309,101 @@ def create_office(
         raise ValueError("تعذر إنشاء المكتب بسبب تكرار بيانات الموقع.") from exc
 
 
+def update_office(
+    session: Session,
+    office_id: str,
+    name: str,
+    building: str = "",
+    department: str = "",
+    room: str = "",
+    manager: str = "",
+    actor_name: str = "المسؤول",
+) -> Office:
+    values = {
+        "name": name.strip(),
+        "building": building.strip() or None,
+        "department": department.strip() or None,
+        "room": room.strip() or None,
+        "manager": manager.strip() or None,
+    }
+    if not values["name"]:
+        raise ValueError("اسم المكتب مطلوب.")
+    limits = {
+        "name": 180, "building": 120, "department": 160,
+        "room": 80, "manager": 160,
+    }
+    if any(value is not None and len(value) > limits[key] for key, value in values.items()):
+        raise ValueError("أحد حقول المكتب يتجاوز الحد المسموح.")
+
+    try:
+        with session.begin():
+            office = session.get(Office, office_id)
+            if office is None:
+                raise ValueError("المكتب المطلوب تعديله غير موجود.")
+            duplicate = session.scalar(
+                select(Office.id).where(
+                    Office.id != office_id,
+                    Office.name == values["name"],
+                    Office.building == values["building"],
+                    Office.room == values["room"],
+                ).limit(1)
+            )
+            if duplicate:
+                raise ValueError("اسم المكتب وموقعه مسجلان مسبقاً.")
+            office.name = values["name"]
+            office.building = values["building"]
+            office.department = values["department"]
+            office.room = values["room"]
+            office.manager = values["manager"]
+            office.updated_at = utc_now()
+            session.add(AuditLog(
+                entity_type="office",
+                entity_id=office.id,
+                action="updated",
+                actor_name=actor_name or "المسؤول",
+                details=f"تعديل بيانات المكتب: {office.name}",
+            ))
+            session.flush()
+        return office
+    except IntegrityError as exc:
+        session.rollback()
+        raise ValueError("تعذر تعديل المكتب بسبب تعارض في بيانات الموقع.") from exc
+
+
+def set_office_active(
+    session: Session,
+    office_id: str,
+    is_active: bool,
+    actor_name: str = "المسؤول",
+) -> Office:
+    with session.begin():
+        office = session.get(Office, office_id)
+        if office is None:
+            raise ValueError("المكتب المطلوب غير موجود.")
+        if not is_active and office.is_active:
+            assigned_count = session.scalar(
+                select(func.count()).select_from(Asset).where(
+                    Asset.office_id == office.id,
+                    Asset.status != "retired",
+                )
+            ) or 0
+            if assigned_count:
+                raise ValueError(
+                    "لا يمكن إيقاف المكتب قبل نقل جميع الأصول غير المستبعدة إلى مواقع أخرى."
+                )
+        office.is_active = is_active
+        office.updated_at = utc_now()
+        session.add(AuditLog(
+            entity_type="office",
+            entity_id=office.id,
+            action="activated" if is_active else "deactivated",
+            actor_name=actor_name or "المسؤول",
+            details=f"تغيير حالة المكتب {office.name}.",
+        ))
+        session.flush()
+    return office
+
+
 def list_offices(session: Session, active_only: bool = False) -> list[Office]:
     query = select(Office).order_by(Office.name)
     if active_only:
