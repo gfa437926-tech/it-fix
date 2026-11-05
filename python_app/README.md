@@ -97,7 +97,7 @@ AUTO_CREATE_SCHEMA=false
 
 ## إنشاء ملف Windows EXE
 
-يوجد مسار بناء تلقائي في GitHub Actions باسم **Python Asset Inventory Windows Build**، وينتج ملفاً باسم `ITFix-Asset-Inventory.exe` مرفقاً معه دليل التشغيل وملف إعداد نموذجي. يمكن تشغيله من تبويب Actions بعد نجاح البناء وتنزيل artifact باسم `ITFix-Asset-Inventory-Windows`.
+يوجد مسار بناء تلقائي في GitHub Actions باسم **Python Asset Inventory Windows Build**، وينتج ملف سطح المكتب `ITFix-Asset-Inventory.exe` وأداة سطر أوامر مستقلة `ITFix-Restore-Backup.exe` مرفقاً معهما دليل التشغيل وملف الإعداد النموذجي. يمكن تنزيل artifact باسم `ITFix-Asset-Inventory-Windows` بعد نجاح البناء.
 
 في النسخة المجمّعة، تحفظ قاعدة SQLite المحلية في مجلد المستخدم:
 
@@ -120,6 +120,16 @@ AUTO_CREATE_SCHEMA=false
 ## التحقق من النسخة واستعادتها (SQLite)
 
 لاستعادة نسخة SQLite، أوقف جميع نوافذ IT Fix أولاً، ولا تستعد نسخة فوق قاعدة مستخدمة من التطبيق. نفّذ من مجلد المستودع:
+
+```powershell
+# تحقق من سلامة الأرشيف دون تعديل البيانات
+.\\ITFix-Restore-Backup.exe "C:\\Backups\\ITFix-Backup.zip" --verify-only
+
+# أغلق IT Fix بالكامل، ثم نفّذ الاستعادة
+.\\ITFix-Restore-Backup.exe "C:\\Backups\\ITFix-Backup.zip" --confirm-restore
+```
+
+للتشغيل من مصدر Python بدلاً من ملف EXE:
 
 ```powershell
 py -m python_app.restore_backup "C:\\Backups\\ITFix-Backup.zip" --verify-only
