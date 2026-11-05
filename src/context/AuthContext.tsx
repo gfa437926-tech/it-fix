@@ -153,7 +153,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!idToken) throw new Error('لم يُرجع Google رمز الهوية. تحقق من إعداد SHA-1 وملف google-services.json.');
         const credential = GoogleAuthProvider.credential(idToken);
         await signInWithCredential(auth, credential);
-        token = nativeResult.credential?.accessToken || null;
+
+        // The native plugin's access token may contain only basic sign-in scopes.
+        // Never expose it to Google Sheets/Drive API calls as if it had the
+        // additional OAuth scopes requested by googleProvider.
+        token = null;
+        inMemoryAccessToken = null;
+        setGoogleAccessToken(null);
       } else {
         const result = await signInWithPopup(auth, googleProvider);
         const credential = GoogleAuthProvider.credentialFromResult(result);
