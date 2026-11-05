@@ -46,6 +46,8 @@ def test_bootstrap_creates_one_admin_with_hashed_password(session: Session) -> N
     assert session.scalar(select(AuditLog).where(
         AuditLog.entity_type == "app_user", AuditLog.action == "bootstrap_admin"
     )) is not None
+    # End the read transaction opened by the assertions before starting a new unit of work.
+    session.rollback()
 
     with pytest.raises(ValueError, match="مسبقاً"):
         bootstrap_first_admin(
