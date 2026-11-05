@@ -104,6 +104,99 @@ export async function getSpreadsheetInfo(
   };
 }
 
+
+/**
+ * Expand only the required sheet grids before writing a full snapshot.
+ * Google Sheets value writes do not reliably create missing grid rows/columns.
+ * Existing dimensions are never reduced, so this operation cannot truncate data.
+ */
+async function ensureSheetCapacity(
+  accessToken: string,
+  spreadsheetId: string,
+  requirements: Array<{ title: string; rows: number; columns: number }>
+): Promise<void> {
+  const metadataResponse = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=sheets(properties(sheetId,title,gridProperties(rowCount,columnCount)))`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+
+  if (!metadataResponse.ok) {
+    throw await googleApiError(
+      metadataResponse,
+      'تعذر قراءة أبعاد أوراق Google Sheets قبل المزامنة'
+    );
+  }
+
+  const metadata = await metadataResponse.json();
+  const sheets = (metadata.sheets || []) as Array<{
+    properties?: {
+      sheetId?: number;
+      title?: string;
+      gridProperties?: { rowCount?: number; columnCount?: number };
+    };
+  }>;
+
+  const requests: Array<{
+    updateSheetProperties: {
+      properties: {
+        sheetId: number;
+        gridProperties: { rowCount: number; columnCount: number };
+      };
+      fields: string;
+    };
+  }> = [];
+
+  for (const requirement of requirements) {
+    const sheet = sheets.find((entry) => entry.properties?.title === requirement.title);
+    const properties = sheet?.properties;
+    const sheetId = properties?.sheetId;
+
+    if (typeof sheetId !== 'number') {
+      throw new Error(`ورقة "${requirement.title}" غير موجودة أو تعذر تحديد معرّفها.`);
+    }
+
+    const currentRows = properties?.gridProperties?.rowCount || 0;
+    const currentColumns = properties?.gridProperties?.columnCount || 0;
+    const nextRows = Math.max(currentRows, requirement.rows);
+    const nextColumns = Math.max(currentColumns, requirement.columns);
+
+    if (nextRows !== currentRows || nextColumns !== currentColumns) {
+      requests.push({
+        updateSheetProperties: {
+          properties: {
+            sheetId,
+            gridProperties: { rowCount: nextRows, columnCount: nextColumns },
+          },
+          fields: 'gridProperties.rowCount,gridProperties.columnCount',
+        },
+      });
+    }
+  }
+
+  if (requests.length === 0) return;
+
+  const expandResponse = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}:batchUpdate`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ requests }),
+    }
+  );
+
+  if (!expandResponse.ok) {
+    throw await googleApiError(
+      expandResponse,
+      'تعذر توسيع أوراق Google Sheets لاستيعاب كامل البيانات؛ لم تبدأ كتابة snapshot.'
+    );
+  }
+}
+
 /**
  * Push all assets and custody cards to the Google Spreadsheet
  */
@@ -226,6 +319,12 @@ export async function syncDataToGoogleSheet(
       ]);
     }
   });
+
+  // Ensure large inventories fit before writing; never shrink an existing sheet.
+  await ensureSheetCapacity(accessToken, spreadsheetId, [
+    { title: 'الأجهزة والجرد', rows: assetRows.length + 1, columns: assetHeaders.length },
+    { title: 'بطاقات العهدة', rows: custodyRows.length + 1, columns: custodyHeaders.length },
+  ]);
 
   // Update sheets via batchUpdate values
   const payload = {
