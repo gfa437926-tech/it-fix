@@ -1,0 +1,20 @@
+{
+  "appId": "com.itfix.assets",
+  "appName": "IT Fix - Asset Management",
+  "webDir": "dist",
+  "android": {
+    "backgroundColor": "#F4F7FA",
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "backgroundColor": "#183B56",
+      "showSpinner": false
+    },
+    "FirebaseAuthentication": {
+      "skipNativeAuth": false,
+      "providers": ["google.com"]
+    }
+  }
+}
