@@ -15,8 +15,18 @@ The existing React + Vite application is kept as the shared UI. Electron is adde
 - Never put Firebase Admin credentials or service-account keys in the renderer or packaged app.
 - Review Firestore rules and Firebase Auth before distributing the installer.
 
-## Android path
-The web UI can later be packaged with Capacitor after confirming responsive layouts, Firebase Auth persistence, file import/export, camera/QR and native permissions. Android packaging requires Android Studio/SDK and a signed release keystore. It is not included in this Electron change.
+## Android scaffold
+Capacitor dependencies and `capacitor.config.ts` are now committed. Android commands:
+1. `npm install`
+2. `npm run android:add` (one-time; requires Android SDK/tooling)
+3. `npm run android:sync`
+4. `npm run android:open` to open Android Studio
+5. Build/debug in Android Studio; configure a signed release keystore before distributing APK/AAB.
 
-## Verification
-Run `npm run lint`, `npm run build`, then `npm run desktop:pack`. Installer creation has not been executed by this repository edit.
+The native `android/` project has not yet been generated or built in this environment. Firebase Google sign-in currently uses `signInWithPopup`, which must be adapted/tested for native Android before release. File import/export, QR/camera permissions, and responsive screens need device validation.
+
+## CI
+A GitHub Actions workflow now runs dependency installation, TypeScript checking (`npm run lint`), and the production web build on pushes and pull requests to `main`. Check the Actions tab for the first result.
+
+## Verification still required
+Run `npm run lint`, `npm run build`, then `npm run desktop:pack` locally. Installer creation and Android device testing have not been executed by these repository edits.
