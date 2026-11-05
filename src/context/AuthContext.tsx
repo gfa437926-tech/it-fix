@@ -119,7 +119,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               currentUser.displayName ||
               (currentUser.email ? currentUser.email.split('@')[0] : 'المتحكم بالمنظومة'),
             email: currentUser.email || '',
-            role: 'admin',
+            // Only the designated super-admin / first controller receives admin access.
+            // All other self-registered accounts start with the limited IT manager role.
+            role: isSuperAdmin ? 'admin' : 'it_manager',
             isActive: true,
             createdAt: new Date().toISOString(),
           };
@@ -129,14 +131,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } catch (err) {
         console.error('Error fetching user profile:', err);
-        setProfile({
-          uid: currentUser.uid,
-          displayName: currentUser.displayName || 'مدير النظام',
-          email: currentUser.email || '',
-          role: 'admin',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-        });
+        // Fail closed: a profile read/write failure must never grant admin UI access.
+        setProfile(null);
       } finally {
         setLoading(false);
       }
