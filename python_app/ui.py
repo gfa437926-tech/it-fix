@@ -619,6 +619,27 @@ class AssetInventoryApp:
              "size": 100, "uploaded": 150, "date": 120},
         )
 
+    def _build_users_tab(self) -> None:
+        toolbar = ttk.Frame(self.users_tab)
+        toolbar.pack(fill="x", pady=(0, 10))
+        ttk.Button(toolbar, text="إضافة مستخدم", command=self.add_local_user).pack(side="left", padx=4)
+        ttk.Button(toolbar, text="تفعيل / إيقاف الحساب", command=self.toggle_selected_user).pack(side="left", padx=4)
+        ttk.Button(toolbar, text="تحديث القائمة", command=self.refresh_users).pack(side="left", padx=4)
+        ttk.Label(
+            self.users_tab,
+            text="يُخزّن النظام كلمات المرور بصيغة scrypt مع ملح عشوائي. الحساب الجديد يطلب تغيير كلمة المرور عند أول تسجيل دخول.",
+            style="Muted.TLabel", wraplength=950, justify="right",
+        ).pack(anchor="e", pady=(0, 8))
+        self.users_tree = self._tree(
+            self.users_tab,
+            ("id", "username", "display_name", "role", "active", "last_login"),
+            {
+                "id": "المعرّف", "username": "اسم الدخول", "display_name": "اسم المستخدم",
+                "role": "الصلاحية", "active": "الحالة", "last_login": "آخر دخول",
+            },
+            {"id": 210, "username": 150, "display_name": 200, "role": 130, "active": 100, "last_login": 170},
+        )
+
     def _build_excel_tab(self) -> None:
         panel = ttk.Frame(self.excel_tab)
         panel.pack(fill="x", pady=10)
@@ -653,6 +674,8 @@ class AssetInventoryApp:
         self.refresh_spare_parts()
         self.refresh_purchases()
         self.refresh_documents()
+        if hasattr(self, "users_tree"):
+            self.refresh_users()
         self.refresh_offices()
         self.refresh_movements()
 
@@ -902,6 +925,130 @@ class AssetInventoryApp:
             webbrowser.open(path.as_uri())
         except Exception as exc:
             messagebox.showerror("تعذر فتح المرفق", str(exc), parent=self.root)
+
+    def refresh_users(self) -> None:
+        if not hasattr(self, "users_tree") or self.user.role != "admin":
+            return
+        with SessionLocal() as session:
+            users = list_users(session)
+        self.users_tree.delete(*self.users_tree.get_children())
+        role_labels = {"admin": "مدير النظام", "it_manager": "مدير الأصول"}
+        for item in users:
+            self.users_tree.insert("", "end", iid=item.id, values=(
+                item.id,
+                item.username,
+                item.display_name,
+                role_labels.get(item.role, item.role),
+                "فعال" if item.is_active else "موقوف",
+                _display_date(item.last_login_at),
+            ))
+
+    def add_local_user(self) -> None:
+        if self.user.role != "admin":
+            messagebox.showerror("غير مسموح", "إنشاء المستخدمين يتطلب صلاحية مدير النظام.", parent=self.root)
+            return
+        username = simpledialog.askstring("إضافة مستخدم", "اسم الدخول (أحرف إنجليزية):", parent=self.root)
+        if username is None:
+            return
+        display_name = simpledialog.askstring("إضافة مستخدم", "الاسم الظاهر:", parent=self.root)
+        if display_name is None:
+            return
+        password = simpledialog.askstring(
+            "كلمة المرور الأولية", "كلمة مرور أولية (12 محرفاً على الأقل):",
+            show="*", parent=self.root,
+        )
+        if password is None:
+            return
+        confirm = simpledialog.askstring("تأكيد كلمة المرور", "أعد إدخال كلمة المرور:", show="*", parent=self.root)
+        if confirm is None:
+            return
+        if password != confirm:
+            messagebox.showerror("كلمتا المرور مختلفتان", "أعد العملية وتأكد من تطابق كلمتي المرور.", parent=self.root)
+            return
+        role_choice = simpledialog.askstring(
+            "دور المستخدم", "اكتب: admin لمدير النظام أو it_manager لمدير الأصول:",
+            initialvalue="it_manager", parent=self.root,
+        )
+        if role_choice is None:
+            return
+        role = role_choice.strip().lower()
+        try:
+            with SessionLocal() as session:
+                created = create_user(
+                    session, self.user, username, display_name, password, role
+                )
+            self.refresh_users()
+            messagebox.showinfo(
+                "تم إنشاء الحساب",
+                f"تم إنشاء حساب {created.username}. سيُطلب من صاحبه تغيير كلمة المرور عند أول دخول.",
+                parent=self.root,
+            )
+        except Exception as exc:
+            messagebox.showerror("تعذر إنشاء الحساب", str(exc), parent=self.root)
+
+    def toggle_selected_user(self) -> None:
+        selected = self.users_tree.selection() if hasattr(self, "users_tree") else ()
+        if not selected:
+            messagebox.showinfo("تحديد مستخدم", "حدد حساباً من الجدول أولاً.", parent=self.root)
+            return
+        target_id = selected[0]
+        if target_id == self.user.id:
+            messagebox.showwarning(
+                "الحساب الحالي",
+                "لا توقف الحساب الذي تستخدمه حالياً من داخل جلسته.",
+                parent=self.root,
+            )
+            return
+        try:
+            with SessionLocal() as session:
+                target = session.get(AppUser, target_id)
+                if target is None:
+                    raise ValueError("الحساب المطلوب غير موجود.")
+                next_state = not target.is_active
+                state_label = "تفعيل" if next_state else "إيقاف"
+                if not messagebox.askyesno(
+                    state_label + " حساب",
+                    f"هل تريد {state_label} حساب {target.username}؟",
+                    parent=self.root,
+                ):
+                    return
+                set_user_active(session, self.user, target.id, next_state)
+            self.refresh_users()
+        except Exception as exc:
+            messagebox.showerror("تعذر تغيير حالة الحساب", str(exc), parent=self.root)
+
+    def change_password(self) -> None:
+        current = simpledialog.askstring(
+            "تغيير كلمة المرور", "كلمة المرور الحالية:", show="*", parent=self.root
+        )
+        if current is None:
+            return
+        new = simpledialog.askstring(
+            "تغيير كلمة المرور", "كلمة المرور الجديدة (12 محرفاً على الأقل):",
+            show="*", parent=self.root,
+        )
+        if new is None:
+            return
+        confirm = simpledialog.askstring(
+            "تأكيد كلمة المرور", "أعد إدخال كلمة المرور الجديدة:",
+            show="*", parent=self.root,
+        )
+        if confirm is None:
+            return
+        if new != confirm:
+            messagebox.showerror("كلمتا المرور مختلفتان", "كلمتا المرور غير متطابقتين.", parent=self.root)
+            return
+        try:
+            with SessionLocal() as session:
+                change_own_password(session, self.user.id, current, new)
+            self.user.must_change_password = False
+            messagebox.showinfo("تم التغيير", "تم تحديث كلمة المرور بنجاح.", parent=self.root)
+        except Exception as exc:
+            messagebox.showerror("تعذر تغيير كلمة المرور", str(exc), parent=self.root)
+
+    def logout(self) -> None:
+        if messagebox.askyesno("تسجيل الخروج", "هل تريد إنهاء الجلسة وإغلاق التطبيق؟", parent=self.root):
+            self.root.destroy()
 
     def _selected_custody(self) -> CustodyCard | None:
         selected = self.custody_tree.selection()
