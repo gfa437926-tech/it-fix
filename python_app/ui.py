@@ -203,7 +203,10 @@ class AssetDialog(tk.Toplevel):
         self._add_entry(form, "الشركة المصنعة", "brand", asset.brand if asset else "")
         self._add_entry(form, "الطراز / الموديل", "model", asset.model if asset else "")
         self._add_entry(form, "الرقم التسلسلي", "serial", asset.serial_number if asset and asset.serial_number else "")
-        self._add_combo(form, "حالة الأصل", "status", list(STATUS_OPTIONS), STATUS_LABELS_AR.get(asset.status, "متوفر") if asset else "متوفر")
+        # Status transitions are performed only by custody, maintenance,
+        # return and retirement workflows; the asset editor cannot bypass them.
+        status_label = STATUS_LABELS_AR.get(asset.status, "متوفر") if asset else "متوفر"
+        self._add_combo(form, "حالة الأصل", "status", [status_label], status_label)
         self._add_entry(form, "المعالج", "cpu", asset.cpu if asset and asset.cpu else "")
         self._add_entry(form, "الذاكرة RAM", "ram", asset.ram if asset and asset.ram else "")
         self._add_entry(form, "التخزين", "storage", asset.storage if asset and asset.storage else "")
