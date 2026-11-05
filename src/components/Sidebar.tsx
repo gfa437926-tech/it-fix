@@ -111,7 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <aside className="w-64 bg-[#183B56] text-white flex flex-col shrink-0 no-print min-h-[calc(100vh-4rem)]">
+    <aside className="w-full md:w-64 bg-[#183B56] text-white flex flex-col shrink-0 no-print min-h-0 md:min-h-[calc(100vh-4rem)] max-h-36 md:max-h-none">
       {/* Category header */}
       <div className="p-4 border-b border-white/10 flex items-center justify-between">
         <p className="text-xs font-semibold text-teal-300 uppercase tracking-wider">
@@ -125,7 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Nav items */}
-      <nav className="p-3 space-y-1 overflow-y-auto flex-1">
+      <nav className="p-2 md:p-3 flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-x-hidden md:overflow-y-auto flex-1">
         {navItems.map((item) => {
           if (item.adminOnly && !isAdmin) return null;
           const Icon = item.icon;
@@ -135,7 +135,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               key={item.id}
               onClick={() => onSelectTab(item.id)}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+              className={`w-auto md:w-full min-w-max md:min-w-0 flex items-center justify-between px-3 md:px-3.5 py-2.5 rounded-xl text-xs md:text-sm font-medium transition-all cursor-pointer ${
                 active
                   ? 'bg-white/15 text-white font-bold shadow-xs'
                   : item.highlight
@@ -181,7 +181,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       {/* Cloud & Database indicator footer */}
-      <div className="p-3.5 m-3 rounded-xl bg-white/5 border border-white/10 text-xs text-slate-300 flex items-center gap-2">
+      <div className="hidden md:flex p-3.5 m-3 rounded-xl bg-white/5 border border-white/10 text-xs text-slate-300 items-center gap-2">
         <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
         <div className="truncate">
           <p className="font-semibold text-white">قاعدة البيانات: Firestore</p>
