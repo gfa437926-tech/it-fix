@@ -299,6 +299,50 @@ def set_user_active(
     return user
 
 
+def set_user_role(
+    session: Session,
+    actor: AppUser,
+    target_user_id: str,
+    new_role: str,
+) -> AppUser:
+    if new_role not in {"admin", "it_manager"}:
+        raise ValueError("الدور المحدد غير معروف.")
+
+    with session.begin():
+        current_actor = _require_active_admin(session, actor)
+        user = session.get(AppUser, target_user_id)
+        if user is None:
+            raise ValueError("الحساب المطلوب غير موجود.")
+        if not user.is_active:
+            raise ValueError("لا يمكن تغيير دور حساب موقوف.")
+        if user.role == new_role:
+            raise ValueError("الحساب يملك هذه الصلاحية بالفعل.")
+        if user.role == "admin" and new_role != "admin":
+            other_admins = session.scalar(
+                select(func.count()).select_from(AppUser).where(
+                    AppUser.role == "admin",
+                    AppUser.is_active.is_(True),
+                    AppUser.id != user.id,
+                )
+            ) or 0
+            if other_admins == 0:
+                raise ValueError("لا يمكن خفض صلاحية آخر مدير نظام نشط.")
+        previous_role = user.role
+        user.role = new_role
+        user.updated_at = utc_now()
+        session.add(AuditLog(
+            entity_type="app_user",
+            entity_id=user.id,
+            action="role_changed",
+            actor_name=current_actor.display_name,
+            details=(
+                f"تغيير دور الحساب {user.username} من {previous_role} إلى {new_role}."
+            ),
+        ))
+        session.flush()
+    return user
+
+
 def reset_user_password(
     session: Session,
     actor: AppUser,
