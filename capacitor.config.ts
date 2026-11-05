@@ -14,6 +14,10 @@ const config: CapacitorConfig = {
       launchShowDuration: 1500,
       backgroundColor: '#183B56',
       showSpinner: false
+    },
+    FirebaseAuthentication: {
+      skipNativeAuth: false,
+      providers: ['google.com']
     }
   }
 };
