@@ -40,7 +40,8 @@
     "@capacitor/browser": "^7.0.1",
     "@capacitor/filesystem": "^7.1.4",
     "@capacitor/share": "^7.0.1",
-    "@capacitor/splash-screen": "^7.0.1"
+    "@capacitor/splash-screen": "^7.0.1",
+    "@capacitor-firebase/authentication": "^7.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
