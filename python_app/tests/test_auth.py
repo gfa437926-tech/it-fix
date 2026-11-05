@@ -112,13 +112,15 @@ def test_stale_admin_object_cannot_create_users_after_deactivation(session: Sess
         session, admin, "second.admin", "مدير ثان",
         "Second-Admin-Password-2026!", "admin",
     )
-    set_user_active(session, second_admin, admin.id, False)
+    stale_admin = admin
+    session.expunge(stale_admin)
+    set_user_active(session, second_admin, stale_admin.id, False)
 
-    # Simulate an old in-memory user object still carrying the former role state.
-    admin.is_active = True
-    admin.role = "admin"
+    # The detached object still carries the previously authenticated role.
+    assert stale_admin.is_active is True
+    assert stale_admin.role == "admin"
 
-    with pytest.raises(PermissionError, match="مدير نظام نشط"):
+    with pytest.raises(PermissionError, match="مدير النظام نشط"):
         create_user(
             session, admin, "blocked.user", "حساب غير مسموح",
             "Blocked-Password-2026!", "it_manager",
