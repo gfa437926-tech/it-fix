@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 
-from python_app.database import engine, initialize_database
+from python_app.database import database_health, engine, initialize_database
 from python_app.models import Base
 
 
@@ -100,5 +100,23 @@ def test_schema_readiness_detects_missing_column_when_tables_exist() -> None:
 
         with pytest.raises(RuntimeError, match="مخطط قاعدة البيانات لا يطابق"):
             initialize_database(target, allow_schema_creation=False)
+    finally:
+        target.dispose()
+
+
+
+def test_database_health_does_not_expose_connection_credentials() -> None:
+    target = create_engine("sqlite://")
+
+    @event.listens_for(target, "connect")
+    def fail_connection(_connection, _record) -> None:
+        raise RuntimeError("connection failed: postgresql://operator:top-secret@db.example.test/app")
+
+    try:
+        healthy, diagnostic = database_health(target)
+        assert healthy is False
+        assert "top-secret" not in diagnostic
+        assert "db.example.test" not in diagnostic
+        assert "تعذر الاتصال" in diagnostic
     finally:
         target.dispose()
