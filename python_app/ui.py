@@ -32,6 +32,8 @@ from .services.assets import (
     retire_asset,
     transfer_asset,
     update_asset,
+    update_office,
+    set_office_active,
 )
 from .services.purchases import create_purchase_record, list_purchase_records
 from .services.documents import attach_asset_document, list_asset_documents, resolve_asset_document_path
@@ -269,10 +271,10 @@ class AssetDialog(tk.Toplevel):
 
 
 class OfficeDialog(tk.Toplevel):
-    def __init__(self, parent: tk.Misc) -> None:
+    def __init__(self, parent: tk.Misc, office: Office | None = None) -> None:
         super().__init__(parent)
         self.result: tuple[str, str, str, str, str] | None = None
-        self.title("إضافة مكتب أو موقع")
+        self.title("تعديل مكتب أو موقع" if office else "إضافة مكتب أو موقع")
         self.geometry("480x380")
         self.transient(parent)
         self.grab_set()
@@ -280,6 +282,13 @@ class OfficeDialog(tk.Toplevel):
         form.pack(fill="both", expand=True)
         ttk.Label(form, text="تعريف موقع جديد", font=("Tahoma", 16, "bold")).pack(anchor="e", pady=(0, 12))
         self.fields: dict[str, tk.StringVar] = {}
+        initial_values = {
+            "name": office.name if office else "",
+            "building": office.building or "" if office else "",
+            "department": office.department or "" if office else "",
+            "room": office.room or "" if office else "",
+            "manager": office.manager or "" if office else "",
+        }
         for key, label in [
             ("name", "اسم المكتب"),
             ("building", "المبنى"),
@@ -290,7 +299,7 @@ class OfficeDialog(tk.Toplevel):
             row = ttk.Frame(form)
             row.pack(fill="x", pady=6)
             ttk.Label(row, text=label, width=16).pack(side="right")
-            var = tk.StringVar()
+            var = tk.StringVar(value=initial_values[key])
             self.fields[key] = var
             ttk.Entry(row, textvariable=var, justify="right").pack(side="right", fill="x", expand=True)
         controls = ttk.Frame(form)
@@ -543,7 +552,9 @@ class AssetInventoryApp:
     def _build_offices_tab(self) -> None:
         toolbar = ttk.Frame(self.offices_tab)
         toolbar.pack(fill="x", pady=(0, 10))
-        ttk.Button(toolbar, text="إضافة مكتب", command=self.add_office).pack(side="left")
+        ttk.Button(toolbar, text="إضافة مكتب", command=self.add_office).pack(side="left", padx=4)
+        ttk.Button(toolbar, text="تعديل المكتب", command=self.edit_office).pack(side="left", padx=4)
+        ttk.Button(toolbar, text="تفعيل / إيقاف", command=self.toggle_selected_office).pack(side="left", padx=4)
         columns = ("id", "name", "building", "department", "room", "manager", "status")
         self.offices_tree = self._tree(
             self.offices_tab, columns,
@@ -1481,6 +1492,49 @@ class AssetInventoryApp:
             messagebox.showinfo("تم الحفظ", "تم إضافة المكتب.", parent=self.root)
         except Exception as exc:
             messagebox.showerror("تعذر الحفظ", str(exc), parent=self.root)
+
+    def _selected_office(self) -> Office | None:
+        selected = self.offices_tree.selection()
+        if not selected:
+            messagebox.showinfo("تحديد مكتب", "حدد مكتباً من الجدول أولاً.", parent=self.root)
+            return None
+        with SessionLocal() as session:
+            return session.get(Office, selected[0])
+
+    def edit_office(self) -> None:
+        office = self._selected_office()
+        if office is None:
+            return
+        dialog = OfficeDialog(self.root, office)
+        self.root.wait_window(dialog)
+        if dialog.result is None:
+            return
+        try:
+            with SessionLocal() as session:
+                update_office(session, office.id, *dialog.result, actor_name=self.actor_name)
+            self.refresh_all()
+            messagebox.showinfo("تم التعديل", "تم تحديث بيانات المكتب.", parent=self.root)
+        except Exception as exc:
+            messagebox.showerror("تعذر تعديل المكتب", str(exc), parent=self.root)
+
+    def toggle_selected_office(self) -> None:
+        office = self._selected_office()
+        if office is None:
+            return
+        next_state = not office.is_active
+        label = "تفعيل" if next_state else "إيقاف"
+        if not messagebox.askyesno(
+            label + " المكتب",
+            f"هل تريد {label} المكتب {office.name}؟",
+            parent=self.root,
+        ):
+            return
+        try:
+            with SessionLocal() as session:
+                set_office_active(session, office.id, next_state, self.actor_name)
+            self.refresh_all()
+        except Exception as exc:
+            messagebox.showerror("تعذر تغيير حالة المكتب", str(exc), parent=self.root)
 
     def import_excel(self) -> None:
         path = filedialog.askopenfilename(
