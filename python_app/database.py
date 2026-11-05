@@ -119,4 +119,6 @@ def database_health(target_engine: Engine = engine) -> tuple[bool, str]:
             connection.execute(text("select 1"))
         return True, target_engine.dialect.name
     except Exception as exc:  # surfaced to the UI as a safe diagnostic
-        return False, str(exc)
+        # Driver exceptions can embed a full connection URL, including credentials.
+        # Do not expose raw exception text in the desktop diagnostics UI.
+        return False, "تعذر الاتصال بقاعدة البيانات. تحقق من الإعدادات والاتصال ثم أعد المحاولة."
