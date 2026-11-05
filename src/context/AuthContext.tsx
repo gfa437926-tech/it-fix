@@ -205,10 +205,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Determine if the currently logged-in user is the Primary Controller
+  // Never treat a missing controller record as permission to administer the system.
+  // The bootstrap account is recognized only by its explicit, configured email.
   const isPrimaryController =
     Boolean(user?.uid) &&
     (primaryControllerUid === user?.uid ||
-      primaryControllerUid === null ||
       user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
 
   const isAdmin = profile?.role === 'admin' && profile?.isActive === true;
