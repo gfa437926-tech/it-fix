@@ -21,14 +21,14 @@ Arabic-first asset inventory, custody, maintenance and office management applica
 ```bash
 npm install
 npm run dev
-``
+```
 
 ## Build the web application
 
 ```bash
 npm run lint
 npm run build
-``
+```
 
 The production web bundle is written to `dist/`.
 
@@ -38,13 +38,13 @@ Run the development application:
 
 ```bash
 npm run desktop:dev
-``
+```
 
 Create a Windows installer:
 
 ```bash
 npm run desktop:build
-``
+```
 
 The installer is written to `release/`. Electron uses context isolation, a sandboxed renderer, disabled Node integration, and restricted navigation.
 
@@ -56,14 +56,14 @@ The Android project is generated locally (it is intentionally not committed as g
 npm run android:add
 npm run android:sync
 npm run android:open
-``
+```
 
 Build a debug APK from Android Studio, or run:
 
 ```bash
 cd android
 ./gradlew assembleDebug
-``
+```
 
 The debug APK is produced at `android/app/build/outputs/apk/debug/app-debug.apk`.
 
@@ -75,7 +75,18 @@ The debug APK is produced at `android/app/build/outputs/apk/debug/app-debug.apk`
 4. Keep the file out of source control. Do not commit service-account keys or private credentials.
 5. Confirm the Firebase Authentication providers and authorized domains required by the project are enabled.
 
-The Android wrapper currently uses the existing web Firebase authentication flow. Native Google sign-in still requires a dedicated Android OAuth/Firebase integration and must not be considered enabled merely because the APK builds.
+Google sign-in now uses the native Capacitor Firebase Authentication plugin on Android, then exchanges the returned Google ID token with the existing Firebase JavaScript Auth instance. This keeps the JavaScript Firestore and Storage clients authenticated in the same session. Web browsers continue to use the existing Google popup flow.
+
+Before native Google sign-in can work on a device:
+
+1. Add the Android app in Firebase using package ID `com.itfix.assets`.
+2. Enable Google under Firebase Authentication → Sign-in method.
+3. Add the app's debug and release SHA-1 fingerprints in Firebase project settings. For Play distribution, also add the Play App Signing SHA-1.
+4. Download the refreshed `google-services.json` into `android/app/` after adding the fingerprints.
+5. In `android/variables.gradle`, enable the Google provider for the plugin by adding `rgcfaIncludeGoogle = true` and `androidxCredentialsVersion = '1.3.0'` inside the existing `ext { ... }` block.
+6. Run `npm run android:sync` again, then build and test on a real Android device.
+
+The native Google provider is configured in `capacitor.config.ts`. The Firebase Authentication plugin signs in natively and the app bridges the Google ID token into the Firebase JS SDK. Google Sheets API access still requires a separate OAuth access-token/scope flow; a successful Firebase sign-in alone does not grant Sheets API access.
 
 ## Environment and demo data
 
@@ -86,3 +97,12 @@ The Android wrapper currently uses the existing web Firebase authentication flow
 ## CI artifacts
 
 GitHub Actions workflows are provided for Windows installer and Android debug APK builds. A workflow definition is not proof that an artifact was successfully produced: check the corresponding Actions run and download its artifact after the job completes.
+
+
+### Native Google sign-in implementation
+
+- Uses `@capacitor-firebase/authentication` 7.x to match Capacitor 7.
+- Android native Google sign-in is exchanged into the Firebase JS Auth session using `signInWithCredential`.
+- Native Firebase JS Auth uses IndexedDB persistence so the session survives app restarts.
+- Web sign-in remains on Firebase's existing popup flow.
+- The native Firebase setup is incomplete until the Firebase Android app, SHA-1 fingerprints, and `google-services.json` are configured as described above.
