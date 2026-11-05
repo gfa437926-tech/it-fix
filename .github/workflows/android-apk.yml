@@ -37,7 +37,10 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           # The legacy SDK package named 'tools' is no longer published.
-          packages: platform-tools,platforms;android-35,build-tools;35.0.0
+          packages: |
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
       - name: Install dependencies
         run: npm install --legacy-peer-deps --no-audit --no-fund
       - name: TypeScript validation
