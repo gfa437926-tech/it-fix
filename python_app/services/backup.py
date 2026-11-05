@@ -288,7 +288,7 @@ def verify_backup_archive(archive_path: str | Path) -> BackupVerificationResult:
                 size, digest = _zip_member_digest(archive, member)
                 if size != item.get("size_bytes"):
                     raise ValueError("حجم أحد المرفقات لا يطابق manifest.")
-                if not hashlib.compare_digest(digest, str(item.get("sha256", ""))):
+                if not hmac.compare_digest(digest, str(item.get("sha256", ""))):
                     raise ValueError("بصمة أحد المرفقات لا تطابق manifest.")
 
             return BackupVerificationResult(
