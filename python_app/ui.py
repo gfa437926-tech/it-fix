@@ -310,13 +310,14 @@ class OfficeDialog(tk.Toplevel):
 
 
 class AssetInventoryApp:
-    def __init__(self, root: tk.Tk) -> None:
+    def __init__(self, root: tk.Tk, user: AppUser) -> None:
         self.root = root
+        self.user = user
+        self.actor_name = user.display_name
         self.root.title("IT Fix — نظام جرد الأصول")
         self.root.geometry("1360x850")
         self.root.minsize(1080, 700)
         self.root.configure(bg="#f3f6f8")
-        self.actor_name = "مدير محلي"
 
         self._configure_style()
         self._build_header()
@@ -347,10 +348,28 @@ class AssetInventoryApp:
             header, text="IT Fix  |  نظام إدارة وجرد الأصول",
             bg="#173f5f", fg="white", font=("Tahoma", 20, "bold"),
         ).pack(side="right", padx=24, pady=18)
+        actions = tk.Frame(header, bg="#173f5f")
+        actions.pack(side="left", padx=18, pady=12)
+        role = "مدير النظام" if self.user.role == "admin" else "مدير أصول"
         tk.Label(
-            header, text="نسخة Python مستقلة — تعمل محلياً دون Docker",
-            bg="#173f5f", fg="#d4e4ef", font=("Tahoma", 10),
-        ).pack(side="left", padx=24)
+            actions,
+            text=f"المستخدم: {self.user.display_name}  ·  {role}",
+            bg="#173f5f", fg="#d4e4ef", font=("Tahoma", 9),
+        ).pack(side="top", anchor="w", pady=(0, 5))
+        controls = tk.Frame(actions, bg="#173f5f")
+        controls.pack(side="left")
+        tk.Button(
+            controls, text="تغيير كلمة المرور", command=self.change_password,
+            bg="#315a76", fg="white", activebackground="#426b87",
+            activeforeground="white", relief="flat", font=("Tahoma", 9),
+            padx=8, pady=4,
+        ).pack(side="left", padx=(0, 6))
+        tk.Button(
+            controls, text="تسجيل الخروج", command=self.logout,
+            bg="#7b3d45", fg="white", activebackground="#914b54",
+            activeforeground="white", relief="flat", font=("Tahoma", 9),
+            padx=8, pady=4,
+        ).pack(side="left")
 
     def _build_dashboard(self) -> None:
         self.stats_frame = ttk.Frame(self.root, padding=(18, 14, 18, 4))
@@ -383,6 +402,7 @@ class AssetInventoryApp:
         self.movements_tab = ttk.Frame(self.notebook, padding=12)
         self.purchases_tab = ttk.Frame(self.notebook, padding=12)
         self.documents_tab = ttk.Frame(self.notebook, padding=12)
+        self.users_tab = ttk.Frame(self.notebook, padding=12)
         self.excel_tab = ttk.Frame(self.notebook, padding=12)
         self.notebook.add(self.assets_tab, text="الأصول والأجهزة")
         self.notebook.add(self.custody_tab, text="بطاقات العهدة")
@@ -391,6 +411,8 @@ class AssetInventoryApp:
         self.notebook.add(self.movements_tab, text="سجل الحركات")
         self.notebook.add(self.purchases_tab, text="المشتريات والضمان")
         self.notebook.add(self.documents_tab, text="مرفقات الأصول")
+        if self.user.role == "admin":
+            self.notebook.add(self.users_tab, text="المستخدمون والصلاحيات")
         self.notebook.add(self.excel_tab, text="استيراد وتصدير Excel")
         self._build_assets_tab()
         self._build_custody_tab()
@@ -399,6 +421,8 @@ class AssetInventoryApp:
         self._build_movements_tab()
         self._build_purchases_tab()
         self._build_documents_tab()
+        if self.user.role == "admin":
+            self._build_users_tab()
         self._build_excel_tab()
 
     def _tree(
