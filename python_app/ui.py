@@ -1096,7 +1096,8 @@ class AssetInventoryApp:
                 if asset.status in {"available", "returned"}
             ]
         card_number = simpledialog.askstring(
-            "بطاقة عهدة", "رقم البطاقة:", initialvalue=f"CR-{datetime.now():%y%m%d%H%M}", parent=self.root
+            "بطاقة عهدة", "رقم البطاقة:",
+            initialvalue=f"CR-{datetime.now():%y%m%d%H%M}", parent=self.root,
         )
         if not card_number:
             return
@@ -1112,27 +1113,83 @@ class AssetInventoryApp:
         )
         if not office_name:
             return
-        asset_hint = "\n".join(
-            f"{asset.serial_number or 'بدون رقم'} — {asset.brand} {asset.model}"
-            for asset in available_assets[:25]
-        )
-        serial = simpledialog.askstring(
-            "ربط أصل ببطاقة العهدة",
-            "أدخل الرقم التسلسلي لأصل متاح، أو اتركه فارغاً لإضافة بند يدوي.\n" + asset_hint,
+
+        item_count = simpledialog.askinteger(
+            "بنود بطاقة العهدة",
+            "كم بنداً تريد إضافته إلى البطاقة؟ (1–50)",
+            initialvalue=1,
+            minvalue=1,
+            maxvalue=50,
             parent=self.root,
         )
-        linked_asset = None
-        if serial and serial.strip():
-            with SessionLocal() as session:
-                linked_asset = session.scalar(select(Asset).where(
-                    Asset.serial_key == serial.strip().upper()
-                ).limit(1))
-            if linked_asset is None or linked_asset.status not in {"available", "returned"}:
-                messagebox.showerror("أصل غير متاح", "لم يتم العثور على أصل متاح بهذا الرقم التسلسلي.", parent=self.root)
+        if item_count is None:
+            return
+
+        asset_hint = "\n".join(
+            f"{asset.serial_number or 'بدون رقم'} — {asset.brand} {asset.model}"
+            for asset in available_assets[:35]
+        )
+        items: list[CustodyItemInput] = []
+        used_asset_ids: set[str] = set()
+        for index in range(1, item_count + 1):
+            serial = simpledialog.askstring(
+                f"بند العهدة {index}/{item_count}",
+                "أدخل الرقم التسلسلي لأصل متاح لربطه، أو اتركه فارغاً لإدخال مادة يدوية.\n" + asset_hint,
+                parent=self.root,
+            )
+            if serial is None:
                 return
-            item_name = f"{linked_asset.brand} {linked_asset.model}".strip()
-        else:
-            item_name = simpledialog.askstring("بند العهدة", "اسم المادة أو الجهاز:", parent=self.root) or ""
+            linked_asset = None
+            if serial.strip():
+                with SessionLocal() as session:
+                    linked_asset = session.scalar(select(Asset).where(
+                        Asset.serial_key == serial.strip().upper()
+                    ).limit(1))
+                if linked_asset is None or linked_asset.status not in {"available", "returned"}:
+                    messagebox.showerror(
+                        "أصل غير متاح",
+                        f"لم يتم العثور على أصل متاح بالرقم {serial.strip()}.",
+                        parent=self.root,
+                    )
+                    return
+                if linked_asset.id in used_asset_ids:
+                    messagebox.showerror(
+                        "تكرار الأصل",
+                        "لا يمكن إضافة الأصل نفسه أكثر من مرة في البطاقة.",
+                        parent=self.root,
+                    )
+                    return
+                used_asset_ids.add(linked_asset.id)
+                item_name = f"{linked_asset.brand} {linked_asset.model}".strip()
+                quantity = 1.0
+                unit = "جهاز"
+            else:
+                item_name = simpledialog.askstring(
+                    f"بند العهدة {index}/{item_count}",
+                    "اسم المادة أو الجهاز:",
+                    parent=self.root,
+                ) or ""
+                if not item_name.strip():
+                    messagebox.showerror("بيانات ناقصة", "اسم بند العهدة مطلوب.", parent=self.root)
+                    return
+                quantity = simpledialog.askfloat(
+                    "كمية البند", f"الكمية لـ {item_name}:",
+                    initialvalue=1.0, minvalue=0.0001, parent=self.root,
+                )
+                if quantity is None:
+                    return
+                unit = simpledialog.askstring(
+                    "وحدة القياس", "وحدة البند (جهاز، قطعة، صندوق...):",
+                    initialvalue="قطعة", parent=self.root,
+                ) or "قطعة"
+
+            items.append(CustodyItemInput(
+                item_name=item_name,
+                quantity=quantity,
+                unit=unit,
+                asset_id=linked_asset.id if linked_asset else None,
+            ))
+
         try:
             with SessionLocal() as session:
                 create_custody_card(
@@ -1140,15 +1197,16 @@ class AssetInventoryApp:
                     card_number=card_number,
                     responsible_name=responsible,
                     office_name=office_name,
-                    items=[CustodyItemInput(
-                        item_name=item_name,
-                        quantity=1,
-                        asset_id=linked_asset.id if linked_asset else None,
-                    )],
+                    items=items,
                     actor_name=self.actor_name,
                 )
             self.refresh_all()
-            messagebox.showinfo("تم إنشاء البطاقة", "أُنشئت البطاقة بانتظار الاعتماد. لم تتغير حالة الأصل قبل الاعتماد.", parent=self.root)
+            messagebox.showinfo(
+                "تم إنشاء البطاقة",
+                f"أُنشئت بطاقة العهدة وبها {len(items)} بنداً بانتظار الاعتماد. "
+                "لا تتغير حالة الأصول المرتبطة قبل اعتماد البطاقة.",
+                parent=self.root,
+            )
         except Exception as exc:
             messagebox.showerror("تعذر إنشاء البطاقة", str(exc), parent=self.root)
 
