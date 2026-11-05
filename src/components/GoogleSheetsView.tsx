@@ -88,6 +88,10 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
 
   // Create new spreadsheet
   const handleCreateNewSheet = async () => {
+    if (!isPrimaryController) {
+      setErrorMessage('إنشاء جدول Google Sheets متاح للمتحكم الأول فقط.');
+      return;
+    }
     setLoading(true);
     setErrorMessage('');
     setSuccessMessage('');
@@ -121,6 +125,10 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
   // Link existing spreadsheet by URL or ID
   const handleLinkExisting = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isPrimaryController) {
+      setErrorMessage('ربط جدول Google Sheets متاح للمتحكم الأول فقط.');
+      return;
+    }
     if (!customSheetUrl.trim()) return;
 
     setLoading(true);
@@ -164,6 +172,10 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
 
   // Sync / Send data to connected spreadsheet
   const handleSyncToSheet = async () => {
+    if (!isPrimaryController) {
+      setErrorMessage('مزامنة Google Sheets متاحة للمتحكم الأول فقط.');
+      return;
+    }
     if (!connectedSheet) return;
     setLoading(true);
     setErrorMessage('');
@@ -300,7 +312,8 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleSyncToSheet}
-                  disabled={loading}
+                  disabled={loading || !isPrimaryController}
+                  title={!isPrimaryController ? 'متاح للمتحكم الأول فقط' : undefined}
                   className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
                 >
                   <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -343,7 +356,8 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
             <div className="flex flex-wrap items-center justify-center gap-3">
               <button
                 onClick={handleCreateNewSheet}
-                disabled={loading}
+                disabled={loading || !isPrimaryController}
+                title={!isPrimaryController ? 'متاح للمتحكم الأول فقط' : undefined}
                 className="flex items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
               >
                 <PlusCircle className="w-4 h-4" />
@@ -352,6 +366,8 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
 
               <button
                 onClick={() => setIsLinkingManual(true)}
+                disabled={!isPrimaryController}
+                title={!isPrimaryController ? 'متاح للمتحكم الأول فقط' : undefined}
                 className="flex items-center gap-2 px-4 py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
               >
                 <Link className="w-4 h-4 text-slate-500" />
