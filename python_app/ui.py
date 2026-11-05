@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy import select
 
-from .database import SessionLocal, database_health
+from .database import SessionLocal, database_health, engine as database_engine
 from .models import AppUser, Asset, AssetDocument, Office
 from .services.auth import (
     authenticate_user,
@@ -18,6 +18,7 @@ from .services.auth import (
     create_user,
     list_users,
     set_user_active,
+    require_active_admin,
 )
 from .services.assets import (
     ASSET_CATEGORIES,
@@ -38,7 +39,6 @@ from .services.assets import (
 from .services.purchases import create_purchase_record, list_purchase_records
 from .services.audit import export_audit_logs_to_csv, list_audit_logs
 from .services.backup import create_backup_archive
-from .database import engine as database_engine
 from .services.reports import export_management_report
 from .services.documents import attach_asset_document, list_asset_documents, resolve_asset_document_path
 from .services.excel_service import (
@@ -1047,6 +1047,13 @@ class AssetInventoryApp:
         entity_type = self.audit_entity_filter.get()
         action = self.audit_action_filter.get()
         with SessionLocal() as session:
+            try:
+                require_active_admin(session, self.user)
+            except PermissionError:
+                self.audit_tree.delete(*self.audit_tree.get_children())
+                if hasattr(self, "report_status"):
+                    self.report_status.set("تم إيقاف صلاحية هذا الحساب؛ أُخفي سجل التدقيق.")
+                return
             rows = list_audit_logs(
                 session,
                 search=self.audit_search.get(),
@@ -1088,6 +1095,7 @@ class AssetInventoryApp:
             return
         try:
             with SessionLocal() as session:
+                require_active_admin(session, self.user)
                 entity_type = self.audit_entity_filter.get()
                 action = self.audit_action_filter.get()
                 count = export_audit_logs_to_csv(
@@ -1121,6 +1129,7 @@ class AssetInventoryApp:
             return
         try:
             with SessionLocal() as session:
+                require_active_admin(session, self.user)
                 sheets = export_management_report(session, destination)
             self.report_status.set(
                 f"اكتمل التقرير بنجاح: {sheets} ورقة عمل. تم حفظ الملف في: {destination}"
@@ -1151,6 +1160,8 @@ class AssetInventoryApp:
         if not destination:
             return
         try:
+            with SessionLocal() as session:
+                require_active_admin(session, self.user)
             result = create_backup_archive(
                 destination,
                 database_engine=database_engine,
@@ -1181,6 +1192,11 @@ class AssetInventoryApp:
         if not hasattr(self, "users_tree") or self.user.role != "admin":
             return
         with SessionLocal() as session:
+            try:
+                require_active_admin(session, self.user)
+            except PermissionError:
+                self.users_tree.delete(*self.users_tree.get_children())
+                return
             users = list_users(session)
         self.users_tree.delete(*self.users_tree.get_children())
         role_labels = {"admin": "مدير النظام", "it_manager": "مدير الأصول"}
