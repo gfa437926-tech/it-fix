@@ -231,6 +231,7 @@ def test_admin_can_change_user_role_and_audit_the_change(session: Session) -> No
         AuditLog.entity_id == operator.id,
         AuditLog.action == "role_changed",
     )) is not None
+    session.rollback()
 
     demoted = set_user_role(session, admin, operator.id, "it_manager")
     assert demoted.role == "it_manager"
