@@ -37,6 +37,8 @@ from .services.assets import (
 )
 from .services.purchases import create_purchase_record, list_purchase_records
 from .services.audit import export_audit_logs_to_csv, list_audit_logs
+from .services.backup import create_backup_archive
+from .database import engine as database_engine
 from .services.reports import export_management_report
 from .services.documents import attach_asset_document, list_asset_documents, resolve_asset_document_path
 from .services.excel_service import (
@@ -738,6 +740,11 @@ class AssetInventoryApp:
             text="تحديث سجل التدقيق",
             command=self.refresh_audit,
         ).pack(side="right", padx=5)
+        ttk.Button(
+            actions,
+            text="نسخة احتياطية كاملة",
+            command=self.create_full_backup,
+        ).pack(side="right", padx=5)
         self.report_status = tk.StringVar(value="جاهز لإنشاء التقرير.")
         ttk.Label(
             panel,
@@ -1125,6 +1132,50 @@ class AssetInventoryApp:
             )
         except Exception as exc:
             messagebox.showerror("تعذر إنشاء التقرير", str(exc), parent=self.root)
+
+    def create_full_backup(self) -> None:
+        if self.user.role != "admin":
+            messagebox.showerror(
+                "غير مسموح",
+                "إنشاء النسخ الاحتياطية يتطلب صلاحية مدير النظام.",
+                parent=self.root,
+            )
+            return
+        destination = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="حفظ النسخة الاحتياطية الكاملة",
+            defaultextension=".zip",
+            initialfile=f"ITFix-Backup-{datetime.now():%Y%m%d-%H%M%S}.zip",
+            filetypes=[("نسخة IT Fix الاحتياطية", "*.zip")],
+        )
+        if not destination:
+            return
+        try:
+            result = create_backup_archive(
+                destination,
+                database_engine=database_engine,
+            )
+            self.report_status.set(
+                f"تم إنشاء النسخة الاحتياطية: {result.file_path} — "
+                f"المرفقات: {result.attachment_count} — "
+                f"الحجم: {result.archive_bytes:,} بايت."
+            )
+            messagebox.showwarning(
+                "تم إنشاء النسخة الاحتياطية",
+                f"تم حفظ نسخة قاعدة البيانات والمرفقات بنجاح.\n"
+                f"قاعدة البيانات: {result.database_type}\n"
+                f"عدد المرفقات: {result.attachment_count}\n"
+                f"الحجم: {result.archive_bytes:,} بايت.\n\n"
+                "تنبيه أمني: ملف ZIP غير مشفّر بكلمة مرور ويحتوي بيانات الأصول والمرفقات؛ "
+                "احفظه في موقع محمي ومقيّد الصلاحيات.",
+                parent=self.root,
+            )
+        except Exception as exc:
+            messagebox.showerror(
+                "تعذر إنشاء النسخة الاحتياطية",
+                str(exc),
+                parent=self.root,
+            )
 
     def refresh_users(self) -> None:
         if not hasattr(self, "users_tree") or self.user.role != "admin":
