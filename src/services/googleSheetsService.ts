@@ -394,7 +394,7 @@ export async function fetchSheetValues(
 ): Promise<string[][]> {
   // Quote worksheet names so tabs containing spaces or apostrophes remain valid A1 ranges.
   const quotedSheetName = `'${sheetName.replace(/'/g, "''")}'`;
-  const encodedRange = encodeURIComponent(`${quotedSheetName}!A1:Z500`);
+  const encodedRange = encodeURIComponent(`${quotedSheetName}!A:Z`);
   const response = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodedRange}`,
     {
