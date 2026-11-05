@@ -185,3 +185,226 @@ def create_backup_archive(
         archive_bytes=output.stat().st_size,
         created_at_utc=created_at,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class BackupVerificationResult:
+    archive_path: Path
+    database_type: str
+    database_bytes: int
+    attachment_count: int
+    created_at_utc: str
+
+
+@dataclass(frozen=True, slots=True)
+class RestoreResult:
+    database_path: Path
+    documents_directory: Path
+    restored_attachment_count: int
+    safety_backup_path: Path
+
+
+def _safe_zip_member(name: str) -> bool:
+    if not name or "\\\\" in name or "\\x00" in name:
+        return False
+    path = Path(name)
+    parts = name.split("/")
+    return not path.is_absolute() and all(part not in {"", ".", ".."} for part in parts)
+
+
+def _zip_member_digest(archive: zipfile.ZipFile, member: str) -> tuple[int, str]:
+    digest = hashlib.sha256()
+    size = 0
+    with archive.open(member, "r") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            size += len(chunk)
+            digest.update(chunk)
+    return size, digest.hexdigest()
+
+
+def verify_backup_archive(archive_path: str | Path) -> BackupVerificationResult:
+    source = Path(archive_path).expanduser().resolve()
+    if not source.is_file():
+        raise FileNotFoundError("ملف النسخة الاحتياطية غير موجود.")
+
+    try:
+        with zipfile.ZipFile(source, "r") as archive:
+            infos = archive.infolist()
+            names = [item.filename for item in infos]
+            if len(names) != len(set(names)):
+                raise ValueError("الأرشيف يحتوي أسماء ملفات مكررة.")
+            for info in infos:
+                if not _safe_zip_member(info.filename):
+                    raise ValueError("الأرشيف يحتوي مسار ملف غير آمن.")
+                mode = (info.external_attr >> 16) & 0o170000
+                if mode == 0o120000:
+                    raise ValueError("الأرشيف يحتوي رابطاً رمزياً غير مسموح.")
+            bad_member = archive.testzip()
+            if bad_member:
+                raise ValueError("ملف ZIP تالف عند التحقق من: " + bad_member)
+            if "manifest.json" not in names:
+                raise ValueError("ملف manifest.json غير موجود في النسخة الاحتياطية.")
+
+            manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
+            if manifest.get("application") != "IT Fix Asset Inventory":
+                raise ValueError("الملف ليس نسخة احتياطية معروفة من IT Fix.")
+            if manifest.get("format_version") != 1:
+                raise ValueError("إصدار تنسيق النسخة الاحتياطية غير مدعوم.")
+
+            database_type = manifest.get("database_type")
+            if database_type not in {"sqlite", "postgresql"}:
+                raise ValueError("نوع قاعدة البيانات في manifest غير معروف.")
+            database_member = manifest.get("database_file")
+            expected_db_name = "itfix_assets.sqlite3" if database_type == "sqlite" else "itfix_assets.dump"
+            if database_member != "database/" + expected_db_name or database_member not in names:
+                raise ValueError("مسار ملف قاعدة البيانات داخل الأرشيف غير صالح.")
+
+            database_bytes, database_hash = _zip_member_digest(archive, database_member)
+            if database_bytes != manifest.get("database_size_bytes"):
+                raise ValueError("حجم ملف قاعدة البيانات لا يطابق manifest.")
+            if not hashlib.compare_digest(database_hash, str(manifest.get("database_sha256", ""))):
+                raise ValueError("بصمة قاعدة البيانات لا تطابق manifest.")
+
+            attachments = manifest.get("attachments")
+            if not isinstance(attachments, list):
+                raise ValueError("قائمة المرفقات في manifest غير صالحة.")
+            seen_attachments: set[str] = set()
+            for item in attachments:
+                if not isinstance(item, dict):
+                    raise ValueError("بيانات أحد المرفقات غير صالحة.")
+                member = item.get("path")
+                if not isinstance(member, str) or not member.startswith("data/documents/"):
+                    raise ValueError("مسار أحد المرفقات خارج مجلد المستندات.")
+                if not _safe_zip_member(member) or member in seen_attachments or member not in names:
+                    raise ValueError("الأرشيف يحتوي مسار مرفق غير صالح أو مكرراً.")
+                seen_attachments.add(member)
+                size, digest = _zip_member_digest(archive, member)
+                if size != item.get("size_bytes"):
+                    raise ValueError("حجم أحد المرفقات لا يطابق manifest.")
+                if not hashlib.compare_digest(digest, str(item.get("sha256", ""))):
+                    raise ValueError("بصمة أحد المرفقات لا تطابق manifest.")
+
+            return BackupVerificationResult(
+                archive_path=source,
+                database_type=database_type,
+                database_bytes=database_bytes,
+                attachment_count=len(attachments),
+                created_at_utc=str(manifest.get("created_at_utc", "")),
+            )
+    except zipfile.BadZipFile as exc:
+        raise ValueError("ملف النسخة الاحتياطية ليس أرشيف ZIP صالحاً.") from exc
+    except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise ValueError("ملف manifest داخل النسخة الاحتياطية غير صالح.") from exc
+
+
+def restore_sqlite_backup_archive(
+    archive_path: str | Path,
+    *,
+    database_engine: Engine,
+    data_directory: str | Path = DATA_DIR,
+    confirmed: bool = False,
+    safety_backup_path: str | Path | None = None,
+) -> RestoreResult:
+    """Restore a verified SQLite archive after creating a safety backup.
+
+    This operation is intentionally separate from the running desktop UI.
+    The caller must explicitly confirm that all application instances are closed.
+    """
+    if not confirmed:
+        raise ValueError("الاستعادة تحتاج تأكيداً صريحاً بعد إغلاق جميع نوافذ التطبيق.")
+    if database_engine.dialect.name != "sqlite":
+        raise ValueError("الاستعادة التلقائية متاحة حالياً لقاعدة SQLite فقط؛ PostgreSQL يحتاج pg_restore يدوياً.")
+
+    verified = verify_backup_archive(archive_path)
+    if verified.database_type != "sqlite":
+        raise ValueError("نوع النسخة الاحتياطية لا يطابق قاعدة SQLite المستهدفة.")
+
+    configured_database = database_engine.url.database
+    if not configured_database or configured_database == ":memory:":
+        raise ValueError("لا يمكن استعادة نسخة إلى قاعدة SQLite مؤقتة داخل الذاكرة.")
+    database_path = Path(configured_database).expanduser().resolve()
+    if not database_path.is_file():
+        raise FileNotFoundError("ملف قاعدة البيانات الحالية غير موجود؛ لا يمكن إنشاء نسخة أمان قبل الاستعادة.")
+
+    data_root = Path(data_directory).expanduser().resolve()
+    documents_directory = data_root / "documents"
+    created_at = datetime.now(timezone.utc)
+    if safety_backup_path is None:
+        safety_path = database_path.parent / (
+            "ITFix-Before-Restore-" + created_at.strftime("%Y%m%d-%H%M%S") + ".zip"
+        )
+    else:
+        safety_path = Path(safety_backup_path).expanduser().resolve()
+    if safety_path == Path(archive_path).expanduser().resolve():
+        raise ValueError("لا يجوز الكتابة فوق ملف النسخة التي ستتم استعادتها.")
+
+    safety = create_backup_archive(
+        safety_path,
+        database_engine=database_engine,
+        data_directory=data_root,
+    )
+
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    data_root.mkdir(parents=True, exist_ok=True)
+    documents_staging = Path(tempfile.mkdtemp(prefix=".itfix-documents-restore-", dir=data_root.parent))
+    database_fd, database_staging_name = tempfile.mkstemp(
+        prefix=".itfix-database-restore-",
+        suffix=".sqlite3",
+        dir=database_path.parent,
+    )
+    os.close(database_fd)
+    database_staging = Path(database_staging_name)
+    original_documents = documents_staging.with_name(documents_staging.name + "-original")
+    moved_original_documents = False
+    installed_documents = False
+
+    try:
+        with zipfile.ZipFile(verified.archive_path, "r") as archive:
+            with archive.open("database/itfix_assets.sqlite3", "r") as input_stream, database_staging.open("wb") as output_stream:
+                shutil.copyfileobj(input_stream, output_stream, length=1024 * 1024)
+
+            integrity_connection = sqlite3.connect(database_staging)
+            try:
+                integrity = integrity_connection.execute("PRAGMA integrity_check").fetchone()
+            finally:
+                integrity_connection.close()
+            if not integrity or integrity[0] != "ok":
+                raise ValueError("فشل فحص سلامة قاعدة البيانات الموجودة داخل النسخة.")
+
+            manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
+            for item in manifest["attachments"]:
+                member = item["path"]
+                relative = Path(member.removeprefix("data/documents/"))
+                if relative.is_absolute() or ".." in relative.parts:
+                    raise ValueError("مسار مرفق غير آمن أثناء الاستعادة.")
+                target = documents_staging / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(member, "r") as input_stream, target.open("xb") as output_stream:
+                    shutil.copyfileobj(input_stream, output_stream, length=1024 * 1024)
+
+        database_engine.dispose()
+        if documents_directory.exists():
+            os.replace(documents_directory, original_documents)
+            moved_original_documents = True
+        os.replace(documents_staging, documents_directory)
+        installed_documents = True
+        os.replace(database_staging, database_path)
+    except Exception:
+        if installed_documents:
+            shutil.rmtree(documents_directory, ignore_errors=True)
+        if moved_original_documents and original_documents.exists():
+            os.replace(original_documents, documents_directory)
+        raise
+    finally:
+        shutil.rmtree(documents_staging, ignore_errors=True)
+        database_staging.unlink(missing_ok=True)
+
+    if original_documents.exists():
+        shutil.rmtree(original_documents, ignore_errors=True)
+
+    return RestoreResult(
+        database_path=database_path,
+        documents_directory=documents_directory,
+        restored_attachment_count=verified.attachment_count,
+        safety_backup_path=safety.file_path,
+    )
