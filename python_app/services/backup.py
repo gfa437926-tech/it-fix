@@ -318,6 +318,10 @@ def verify_backup_archive(archive_path: str | Path) -> BackupVerificationResult:
                 if not hmac.compare_digest(digest, str(item.get("sha256", ""))):
                     raise ValueError("بصمة أحد المرفقات لا تطابق manifest.")
 
+            expected_members = {"manifest.json", database_member, *seen_attachments}
+            if set(names) != expected_members:
+                raise ValueError("الأرشيف يحتوي ملفات غير مسجلة في manifest أو يفتقد ملفات مطلوبة.")
+
             return BackupVerificationResult(
                 archive_path=source,
                 database_type=database_type,
