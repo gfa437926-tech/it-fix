@@ -37,8 +37,7 @@ function createWindow() {
   // Keep the application inside its trusted local/dev origin.
   win.webContents.on('will-navigate', (event, navigationUrl) => {
     const isTrustedDevOrigin = isDev && navigationUrl.startsWith('http://localhost:3000');
-    const isAppFile = navigationUrl.startsWith('file://');
-    if (!isTrustedDevOrigin && !isAppFile) {
+    if (!isTrustedDevOrigin) {
       event.preventDefault();
       void openExternalUrl(navigationUrl);
     }
