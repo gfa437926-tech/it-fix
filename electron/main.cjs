@@ -36,10 +36,29 @@ function createWindow() {
 
   // Keep the application inside its trusted local/dev origin.
   win.webContents.on('will-navigate', (event, navigationUrl) => {
-    const isTrustedDevOrigin = isDev && navigationUrl.startsWith('http://localhost:3000');
+    let isTrustedDevOrigin = false;
+    try {
+      isTrustedDevOrigin = isDev && new URL(navigationUrl).origin === 'http://localhost:3000';
+    } catch {
+      isTrustedDevOrigin = false;
+    }
     if (!isTrustedDevOrigin) {
       event.preventDefault();
       void openExternalUrl(navigationUrl);
+    }
+  });
+
+  // Block redirects as well as direct navigation outside the trusted app origin.
+  win.webContents.on('will-redirect', (event, redirectUrl) => {
+    let isTrustedDevOrigin = false;
+    try {
+      isTrustedDevOrigin = isDev && new URL(redirectUrl).origin === 'http://localhost:3000';
+    } catch {
+      isTrustedDevOrigin = false;
+    }
+    if (!isTrustedDevOrigin) {
+      event.preventDefault();
+      void openExternalUrl(redirectUrl);
     }
   });
 
