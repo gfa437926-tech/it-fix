@@ -52,38 +52,57 @@ def _enable_sqlite_integrity(dbapi_connection: object, _connection_record: objec
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, class_=Session)
 
 
+def _validate_schema(target_engine: Engine) -> None:
+    inspector = inspect(target_engine)
+    expected_tables = set(Base.metadata.tables)
+    existing_tables = set(inspector.get_table_names())
+    missing_tables = sorted(expected_tables - existing_tables)
+
+    missing_columns: dict[str, list[str]] = {}
+    for table_name in sorted(expected_tables & existing_tables):
+        actual_columns = {
+            column["name"] for column in inspector.get_columns(table_name)
+        }
+        expected_columns = {
+            column.name for column in Base.metadata.tables[table_name].columns
+        }
+        missing = sorted(expected_columns - actual_columns)
+        if missing:
+            missing_columns[table_name] = missing
+
+    details: list[str] = []
+    if missing_tables:
+        details.append("الجداول الناقصة: " + ", ".join(missing_tables))
+    if missing_columns:
+        details.append(
+            "الأعمدة الناقصة: "
+            + "; ".join(
+                f"{table}: {', '.join(columns)}"
+                for table, columns in missing_columns.items()
+            )
+        )
+    if details:
+        raise RuntimeError(
+            "مخطط قاعدة البيانات لا يطابق إصدار IT Fix الحالي. "
+            "لم يجرِ البرنامج أي تعديل تلقائي على مخطط موجود. "
+            "راجع python_app/models.py وأنشئ ترحيل قاعدة البيانات بعد المراجعة. "
+            + " | ".join(details)
+        )
+
+
 def initialize_database(target_engine: Engine = engine, *, allow_schema_creation: bool | None = None) -> None:
-    is_sqlite = target_engine.dialect.name == "sqlite"
     can_create = settings.auto_create_schema if allow_schema_creation is None else allow_schema_creation
 
     if can_create:
-        Base.metadata.create_all(target_engine)
-        return
+        existing_app_tables = set(inspect(target_engine).get_table_names()) & set(Base.metadata.tables)
+        if existing_app_tables:
+            # create_all() does not migrate existing tables. Validate first so that
+            # old schemas fail clearly instead of partially creating new objects.
+            _validate_schema(target_engine)
+        else:
+            Base.metadata.create_all(target_engine)
 
-    inspector = inspect(target_engine)
-    required_tables = {
-        "offices",
-        "assets",
-        "asset_movements",
-        "import_batches",
-        "audit_logs",
-        "app_users",
-        "custody_cards",
-        "custody_items",
-        "maintenance_records",
-        "spare_parts",
-        "maintenance_part_usage",
-        "purchase_records",
-        "asset_documents",
-    }
-    existing_tables = set(inspector.get_table_names())
-    missing = sorted(required_tables - existing_tables)
-    if missing:
-        raise RuntimeError(
-            "قاعدة البيانات متصلة، لكن مخطط IT Fix غير مهيأ. "
-            "راجع python_app/README.md ثم شغّل أمر تهيئة المخطط صراحة. "
-            f"الجداول الناقصة: {', '.join(missing)}"
-        )
+    _validate_schema(target_engine)
 
 
 def get_session() -> Iterator[Session]:
