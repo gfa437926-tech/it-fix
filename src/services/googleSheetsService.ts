@@ -66,7 +66,7 @@ export async function getSpreadsheetInfo(
   spreadsheetId: string
 ): Promise<GoogleSpreadsheetInfo> {
   const response = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=spreadsheetId,spreadsheetUrl,properties.title,sheets.properties.title`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=spreadsheetId,spreadsheetUrl,properties(title),sheets(properties(title))`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
