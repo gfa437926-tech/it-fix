@@ -325,6 +325,8 @@ def open_maintenance_ticket(
         asset = session.get(Asset, asset_id)
         if asset is None:
             raise ValueError("الأصل غير موجود.")
+        if asset.status == "assigned":
+            raise ValueError("لا يمكن إدخال أصل بعهدة موظف إلى الصيانة قبل إغلاق بطاقة العهدة وإرجاعه.")
         if asset.status in {"retired", "maintenance"}:
             raise ValueError("لا يمكن فتح طلب صيانة لأصل مستبعد أو موجود أصلاً في الصيانة.")
         previous_status = asset.status
