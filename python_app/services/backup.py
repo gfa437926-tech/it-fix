@@ -213,8 +213,8 @@ class RestoreResult:
 def _safe_zip_member(name: str) -> bool:
     if (
         not name
-        or "\\\\" in name
-        or "\\x00" in name
+        or "\\" in name
+        or "\x00" in name
         or ":" in name
         or name.startswith("/")
         or any(ord(character) < 32 for character in name)
