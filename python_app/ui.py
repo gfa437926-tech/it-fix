@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import tkinter as tk
 import webbrowser
-from datetime import datetime
+from datetime import datetime, timezone
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Any
 
@@ -36,6 +36,8 @@ from .services.assets import (
     set_office_active,
 )
 from .services.purchases import create_purchase_record, list_purchase_records
+from .services.audit import export_audit_logs_to_csv, list_audit_logs
+from .services.reports import export_management_report
 from .services.documents import attach_asset_document, list_asset_documents, resolve_asset_document_path
 from .services.excel_service import (
     CATEGORY_LABELS,
@@ -415,6 +417,8 @@ class AssetInventoryApp:
         self.purchases_tab = ttk.Frame(self.notebook, padding=12)
         self.documents_tab = ttk.Frame(self.notebook, padding=12)
         self.users_tab = ttk.Frame(self.notebook, padding=12)
+        self.audit_tab = ttk.Frame(self.notebook, padding=12)
+        self.reports_tab = ttk.Frame(self.notebook, padding=12)
         self.excel_tab = ttk.Frame(self.notebook, padding=12)
         self.notebook.add(self.assets_tab, text="الأصول والأجهزة")
         self.notebook.add(self.custody_tab, text="بطاقات العهدة")
@@ -425,6 +429,8 @@ class AssetInventoryApp:
         self.notebook.add(self.documents_tab, text="مرفقات الأصول")
         if self.user.role == "admin":
             self.notebook.add(self.users_tab, text="المستخدمون والصلاحيات")
+            self.notebook.add(self.audit_tab, text="سجل التدقيق")
+            self.notebook.add(self.reports_tab, text="التقارير الشاملة")
         self.notebook.add(self.excel_tab, text="استيراد وتصدير Excel")
         self._build_assets_tab()
         self._build_custody_tab()
@@ -435,6 +441,8 @@ class AssetInventoryApp:
         self._build_documents_tab()
         if self.user.role == "admin":
             self._build_users_tab()
+            self._build_audit_tab()
+            self._build_reports_tab()
         self._build_excel_tab()
 
     def _tree(
@@ -654,6 +662,91 @@ class AssetInventoryApp:
             {"id": 210, "username": 150, "display_name": 200, "role": 130, "active": 100, "last_login": 170},
         )
 
+    def _build_audit_tab(self) -> None:
+        toolbar = ttk.Frame(self.audit_tab)
+        toolbar.pack(fill="x", pady=(0, 10))
+        ttk.Label(toolbar, text="بحث").pack(side="right", padx=(8, 3))
+        self.audit_search = tk.StringVar()
+        ttk.Entry(toolbar, textvariable=self.audit_search, width=28, justify="right").pack(side="right", padx=3)
+        ttk.Label(toolbar, text="الكيان").pack(side="right", padx=(8, 3))
+        self.audit_entity_filter = tk.StringVar(value="الكل")
+        ttk.Combobox(
+            toolbar,
+            textvariable=self.audit_entity_filter,
+            values=["الكل", "asset", "office", "custody_card", "maintenance_record",
+                    "spare_part", "purchase_record", "asset_document", "app_user"],
+            state="readonly",
+            width=19,
+        ).pack(side="right", padx=3)
+        ttk.Label(toolbar, text="العملية").pack(side="right", padx=(8, 3))
+        self.audit_action_filter = tk.StringVar(value="الكل")
+        ttk.Combobox(
+            toolbar,
+            textvariable=self.audit_action_filter,
+            values=["الكل", "created", "updated", "approved", "rejected", "returned",
+                    "deactivated", "activated", "password_changed", "attached"],
+            state="readonly",
+            width=16,
+        ).pack(side="right", padx=3)
+        ttk.Button(toolbar, text="تطبيق التصفية", command=self.refresh_audit).pack(side="left", padx=4)
+        ttk.Button(toolbar, text="تصدير CSV", command=self.export_audit_csv).pack(side="left", padx=4)
+        ttk.Label(
+            self.audit_tab,
+            text="آخر 1000 عملية كحد أقصى. يظهر هذا السجل لمدير النظام فقط، ويحتفظ بهوية المنفّذ وتفاصيل العملية.",
+            style="Muted.TLabel",
+        ).pack(anchor="e", pady=(0, 8))
+        self.audit_tree = self._tree(
+            self.audit_tab,
+            ("id", "date", "entity", "entity_id", "action", "actor", "details"),
+            {
+                "id": "معرف السجل", "date": "التاريخ UTC", "entity": "نوع الكيان",
+                "entity_id": "معرف الكيان", "action": "العملية",
+                "actor": "المنفذ", "details": "التفاصيل",
+            },
+            {"id": 170, "date": 155, "entity": 130, "entity_id": 170,
+             "action": 120, "actor": 150, "details": 360},
+        )
+
+    def _build_reports_tab(self) -> None:
+        panel = ttk.Frame(self.reports_tab, padding=16)
+        panel.pack(fill="both", expand=True)
+        ttk.Label(
+            panel,
+            text="تقرير شامل لإدارة الأصول",
+            font=("Tahoma", 16, "bold"),
+        ).pack(anchor="e", pady=(0, 8))
+        ttk.Label(
+            panel,
+            text=(
+                "ينشئ ملف Excel متعدد الأوراق يتضمن الملخص والأصول والمكاتب والعهدة "
+                "وبنود العهدة والصيانة وقطع الغيار والمشتريات والمرفقات والحركات والتدقيق. "
+                "التقرير للقراءة فقط ولا يغيّر بيانات النظام."
+            ),
+            style="Muted.TLabel",
+            wraplength=980,
+            justify="right",
+        ).pack(anchor="e", pady=(0, 16))
+        actions = ttk.Frame(panel)
+        actions.pack(anchor="e")
+        ttk.Button(
+            actions,
+            text="إنشاء تقرير Excel شامل",
+            command=self.export_management_report,
+        ).pack(side="right", padx=5)
+        ttk.Button(
+            actions,
+            text="تحديث سجل التدقيق",
+            command=self.refresh_audit,
+        ).pack(side="right", padx=5)
+        self.report_status = tk.StringVar(value="جاهز لإنشاء التقرير.")
+        ttk.Label(
+            panel,
+            textvariable=self.report_status,
+            style="Muted.TLabel",
+            wraplength=980,
+            justify="right",
+        ).pack(anchor="e", pady=(18, 0))
+
     def _build_excel_tab(self) -> None:
         panel = ttk.Frame(self.excel_tab)
         panel.pack(fill="x", pady=10)
@@ -690,6 +783,7 @@ class AssetInventoryApp:
         self.refresh_documents()
         if hasattr(self, "users_tree"):
             self.refresh_users()
+            self.refresh_audit()
         self.refresh_offices()
         self.refresh_movements()
 
@@ -939,6 +1033,94 @@ class AssetInventoryApp:
             webbrowser.open(path.as_uri())
         except Exception as exc:
             messagebox.showerror("تعذر فتح المرفق", str(exc), parent=self.root)
+
+    def refresh_audit(self) -> None:
+        if self.user.role != "admin" or not hasattr(self, "audit_tree"):
+            return
+        entity_type = self.audit_entity_filter.get()
+        action = self.audit_action_filter.get()
+        with SessionLocal() as session:
+            rows = list_audit_logs(
+                session,
+                search=self.audit_search.get(),
+                entity_type="" if entity_type == "الكل" else entity_type,
+                action="" if action == "الكل" else action,
+                limit=1000,
+            )
+        self.audit_tree.delete(*self.audit_tree.get_children())
+        for row in rows:
+            timestamp = row.occurred_at
+            if timestamp.tzinfo is None:
+                timestamp_text = timestamp.replace(tzinfo=timezone.utc).strftime("%Y-%m-%d %H:%M")
+            else:
+                timestamp_text = timestamp.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M")
+            self.audit_tree.insert("", "end", iid=row.id, values=(
+                row.id,
+                timestamp_text,
+                row.entity_type,
+                row.entity_id,
+                row.action,
+                row.actor_name,
+                row.details or "",
+            ))
+        if hasattr(self, "report_status"):
+            self.report_status.set(f"تم تحميل {len(rows)} سجل تدقيق.")
+
+    def export_audit_csv(self) -> None:
+        if self.user.role != "admin":
+            messagebox.showerror("غير مسموح", "تصدير سجل التدقيق يتطلب صلاحية مدير النظام.", parent=self.root)
+            return
+        destination = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="تصدير سجل التدقيق",
+            defaultextension=".csv",
+            initialfile="ITFix-Audit-Log.csv",
+            filetypes=[("CSV", "*.csv")],
+        )
+        if not destination:
+            return
+        try:
+            with SessionLocal() as session:
+                count = export_audit_logs_to_csv(
+                    session,
+                    destination,
+                    search=self.audit_search.get(),
+                    limit=10000,
+                )
+            messagebox.showinfo(
+                "تم تصدير سجل التدقيق",
+                f"تم تصدير {count} سجلاً إلى الملف المحدد.",
+                parent=self.root,
+            )
+        except Exception as exc:
+            messagebox.showerror("تعذر تصدير السجل", str(exc), parent=self.root)
+
+    def export_management_report(self) -> None:
+        if self.user.role != "admin":
+            messagebox.showerror("غير مسموح", "إنشاء التقرير الشامل يتطلب صلاحية مدير النظام.", parent=self.root)
+            return
+        destination = filedialog.asksaveasfilename(
+            parent=self.root,
+            title="حفظ التقرير الشامل",
+            defaultextension=".xlsx",
+            initialfile="ITFix-Management-Report.xlsx",
+            filetypes=[("Excel workbook", "*.xlsx")],
+        )
+        if not destination:
+            return
+        try:
+            with SessionLocal() as session:
+                sheets = export_management_report(session, destination)
+            self.report_status.set(
+                f"اكتمل التقرير بنجاح: {sheets} ورقة عمل. تم حفظ الملف في: {destination}"
+            )
+            messagebox.showinfo(
+                "اكتمل التقرير",
+                f"تم إنشاء التقرير الشامل بنجاح بعدد {sheets} ورقة عمل.",
+                parent=self.root,
+            )
+        except Exception as exc:
+            messagebox.showerror("تعذر إنشاء التقرير", str(exc), parent=self.root)
 
     def refresh_users(self) -> None:
         if not hasattr(self, "users_tree") or self.user.role != "admin":
