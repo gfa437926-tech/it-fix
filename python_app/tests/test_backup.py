@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import zipfile
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from python_app.models import Base
 from python_app.services.assets import AssetInput, create_asset
-from python_app.services.backup import create_backup_archive, _safe_zip_member
+from python_app.services.backup import create_backup_archive, _safe_zip_member, _validate_archive_limits
 from python_app.services.documents import attach_asset_document
 
 
@@ -326,3 +327,41 @@ def test_backup_member_validation_rejects_windows_separators_and_null_bytes(memb
 
 def test_backup_member_validation_accepts_safe_posix_relative_path() -> None:
     assert _safe_zip_member("data/documents/2026/invoice.pdf") is True
+
+
+
+def test_backup_limits_reject_excessive_member_count() -> None:
+    infos = [SimpleNamespace(filename=f"file-{index}", file_size=0) for index in range(10_003)]
+    with pytest.raises(ValueError, match="عدداً كبيراً"):
+        _validate_archive_limits(infos)
+
+
+def test_backup_limits_reject_oversized_member() -> None:
+    infos = [SimpleNamespace(filename="database/itfix_assets.sqlite3", file_size=512 * 1024 * 1024 + 1)]
+    with pytest.raises(ValueError, match="يتجاوز الحجم المسموح"):
+        _validate_archive_limits(infos)
+
+
+def test_backup_limits_reject_excessive_total_expanded_size() -> None:
+    infos = [
+        SimpleNamespace(filename="first.bin", file_size=1024 * 1024 * 1024),
+        SimpleNamespace(filename="second.bin", file_size=1024 * 1024 * 1024),
+        SimpleNamespace(filename="third.bin", file_size=1),
+    ]
+    with pytest.raises(ValueError, match="الإجمالي"):
+        _validate_archive_limits(infos)
+
+
+def test_backup_limits_reject_oversized_manifest() -> None:
+    infos = [SimpleNamespace(filename="manifest.json", file_size=8 * 1024 * 1024 + 1)]
+    with pytest.raises(ValueError, match="manifest"):
+        _validate_archive_limits(infos)
+
+
+def test_backup_limits_accept_normal_archive() -> None:
+    infos = [
+        SimpleNamespace(filename="database/itfix_assets.sqlite3", file_size=2 * 1024 * 1024),
+        SimpleNamespace(filename="data/documents/invoice.pdf", file_size=5 * 1024 * 1024),
+        SimpleNamespace(filename="manifest.json", file_size=2048),
+    ]
+    _validate_archive_limits(infos)
