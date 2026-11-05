@@ -19,6 +19,7 @@ from .services.auth import (
     list_users,
     set_user_active,
     require_active_admin,
+    require_active_user,
 )
 from .services.assets import (
     ASSET_CATEGORIES,
@@ -341,6 +342,25 @@ class AssetInventoryApp:
         self._build_tabs()
         self._build_status_bar()
         self.refresh_all()
+
+    def _ensure_active_session(self, *, admin_only: bool = False) -> bool:
+        try:
+            with SessionLocal() as session:
+                current_user = require_active_user(session, self.user)
+                if admin_only:
+                    current_user = require_active_admin(session, current_user)
+        except PermissionError as exc:
+            messagebox.showerror(
+                "انتهت صلاحية الجلسة",
+                str(exc),
+                parent=self.root,
+            )
+            self.root.destroy()
+            return False
+
+        self.user = current_user
+        self.actor_name = current_user.display_name
+        return True
 
     def _configure_style(self) -> None:
         style = ttk.Style(self.root)
