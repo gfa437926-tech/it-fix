@@ -19,7 +19,7 @@ export interface ParsedImportRow {
 export function parseCSV(content: string): Record<string, string>[] {
   // RFC 4180-compatible parser: preserves commas/newlines inside quoted cells
   // and unescapes doubled quotes. Also strips a UTF-8 BOM from Excel exports.
-  const source = content.replace(/^\\uFEFF/, '');
+  const source = content.replace(/^\uFEFF/, '');
   const matrix: string[][] = [];
   let row: string[] = [];
   let cell = '';
@@ -44,8 +44,8 @@ export function parseCSV(content: string): Record<string, string>[] {
       continue;
     }
 
-    if (!inQuotes && (char === '\\n' || char === '\\r')) {
-      if (char === '\\r' && source[i + 1] === '\\n') i++;
+    if (!inQuotes && (char === '\n' || char === '\r')) {
+      if (char === '\r' && source[i + 1] === '\n') i++;
       row.push(cell);
       if (row.some((value) => value.trim() !== '')) matrix.push(row);
       row = [];
