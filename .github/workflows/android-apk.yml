@@ -56,7 +56,7 @@ jobs:
           marker = "ext {"
           if marker not in source:
               raise SystemExit("Could not locate ext block in android/variables.gradle")
-          source = source.replace(marker, marker + "\\n    rgcfaIncludeGoogle = true\\n    androidxCredentialsVersion = '1.3.0'", 1)
+          source = source.replace(marker, marker + "\n    rgcfaIncludeGoogle = true\n    androidxCredentialsVersion = '1.3.0'", 1)
           path.write_text(source)
           PY
           fi
