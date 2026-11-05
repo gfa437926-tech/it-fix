@@ -89,6 +89,18 @@ Before native Google sign-in can work on a device:
 
 The native Google provider is configured in `capacitor.config.ts`. The Firebase Authentication plugin signs in natively and the app bridges the Google ID token into the Firebase JS SDK. Google Sheets API access still requires a separate OAuth access-token/scope flow; a successful Firebase sign-in alone does not grant Sheets API access. Until that native scope-consent flow is implemented, the app deliberately reports that Sheets/Drive authorization is unavailable on Android rather than passing an access token that may not carry the required scopes. The existing web popup continues to request the configured Sheets and Drive scopes.
 
+## Firestore security rules
+
+The repository's `firestore.rules` now protects the initial controller bootstrap and prevents ordinary users from assigning themselves the `admin` role. Only the recorded primary controller can change controller identity or write system settings; users can update only basic profile fields on their own profile.
+
+Review the rules against the live Firebase project before deployment. To deploy them after selecting the correct Firebase project in the Firebase CLI, run:
+
+```bash
+firebase deploy --only firestore:rules --project YOUR_FIREBASE_PROJECT_ID
+```
+
+Do not skip the project ID check: deploying rules to the wrong Firebase project can affect another application. The rules file in GitHub is not active in Firebase until this deployment succeeds.
+
 ## Environment and demo data
 
 - Keep Firebase configuration and any API credentials in the appropriate environment configuration; never commit private keys.
