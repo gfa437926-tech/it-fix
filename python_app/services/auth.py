@@ -200,7 +200,7 @@ def _require_active_admin(session: Session, actor: AppUser) -> AppUser:
         .execution_options(populate_existing=True)
     )
     if current_actor is None or not current_actor.is_active or current_actor.role != "admin":
-        raise PermissionError("هذه العملية تتطلب حساب مدير نظام نشطاً.")
+        raise PermissionError("هذه العملية تتطلب حساب مدير النظام نشطاً.")
     return current_actor
 
 
