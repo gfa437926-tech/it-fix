@@ -17,22 +17,61 @@ export interface ParsedImportRow {
 }
 
 export function parseCSV(content: string): Record<string, string>[] {
-  const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (lines.length < 2) return [];
+  // RFC 4180-compatible parser: preserves commas/newlines inside quoted cells
+  // and unescapes doubled quotes. Also strips a UTF-8 BOM from Excel exports.
+  const source = content.replace(/^\\uFEFF/, '');
+  const matrix: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let inQuotes = false;
 
-  const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
-  const rows: Record<string, string>[] = [];
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i];
 
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map((v) => v.trim().replace(/^"|"$/g, ''));
-    const row: Record<string, string> = {};
-    headers.forEach((h, idx) => {
-      row[h] = values[idx] || '';
-    });
-    rows.push(row);
+    if (char === '"') {
+      if (inQuotes && source[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (!inQuotes && char === ',') {
+      row.push(cell);
+      cell = '';
+      continue;
+    }
+
+    if (!inQuotes && (char === '\\n' || char === '\\r')) {
+      if (char === '\\r' && source[i + 1] === '\\n') i++;
+      row.push(cell);
+      if (row.some((value) => value.trim() !== '')) matrix.push(row);
+      row = [];
+      cell = '';
+      continue;
+    }
+
+    cell += char;
   }
 
-  return rows;
+  if (inQuotes) {
+    throw new Error('ملف CSV يحتوي على علامة اقتباس غير مغلقة');
+  }
+
+  row.push(cell);
+  if (row.some((value) => value.trim() !== '')) matrix.push(row);
+  if (matrix.length < 2) return [];
+
+  const headers = matrix[0].map((header) => header.trim());
+  return matrix.slice(1).map((values) => {
+    const record: Record<string, string> = {};
+    headers.forEach((header, index) => {
+      if (header) record[header] = (values[index] ?? '').trim();
+    });
+    return record;
+  });
 }
 
 export async function processAssetBatch(
