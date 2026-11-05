@@ -192,6 +192,18 @@ def list_users(session: Session) -> list[AppUser]:
     ).all())
 
 
+def _require_active_admin(session: Session, actor: AppUser) -> AppUser:
+    # Do not trust the role/active flags on a possibly stale ORM instance.
+    current_actor = session.scalar(
+        select(AppUser)
+        .where(AppUser.id == actor.id)
+        .execution_options(populate_existing=True)
+    )
+    if current_actor is None or not current_actor.is_active or current_actor.role != "admin":
+        raise PermissionError("هذه العملية تتطلب حساب مدير نظام نشطاً.")
+    return current_actor
+
+
 def create_user(
     session: Session,
     actor: AppUser,
@@ -200,8 +212,7 @@ def create_user(
     password: str,
     role: str = "it_manager",
 ) -> AppUser:
-    if not actor.is_active or actor.role != "admin":
-        raise PermissionError("إنشاء الحسابات الجديدة يتطلب صلاحية مدير النظام.")
+    actor = _require_active_admin(session, actor)
     username = validate_username(username)
     display_name = display_name.strip()
     validate_password(password)
@@ -242,8 +253,7 @@ def set_user_active(
     target_user_id: str,
     is_active: bool,
 ) -> AppUser:
-    if not actor.is_active or actor.role != "admin":
-        raise PermissionError("تغيير حالة الحسابات يتطلب صلاحية مدير النظام.")
+    actor = _require_active_admin(session, actor)
 
     with session.begin():
         user = session.get(AppUser, target_user_id)
