@@ -23,6 +23,7 @@ from .services.assets import (
     transfer_asset,
     update_asset,
 )
+from .services.purchases import create_purchase_record, list_purchase_records
 from .services.excel_service import (
     CATEGORY_LABELS,
     STATUS_LABELS,
@@ -278,18 +279,21 @@ class AssetInventoryApp:
         self.maintenance_tab = ttk.Frame(self.notebook, padding=12)
         self.offices_tab = ttk.Frame(self.notebook, padding=12)
         self.movements_tab = ttk.Frame(self.notebook, padding=12)
+        self.purchases_tab = ttk.Frame(self.notebook, padding=12)
         self.excel_tab = ttk.Frame(self.notebook, padding=12)
         self.notebook.add(self.assets_tab, text="الأصول والأجهزة")
         self.notebook.add(self.custody_tab, text="بطاقات العهدة")
         self.notebook.add(self.maintenance_tab, text="الصيانة وقطع الغيار")
         self.notebook.add(self.offices_tab, text="المكاتب والمواقع")
         self.notebook.add(self.movements_tab, text="سجل الحركات")
+        self.notebook.add(self.purchases_tab, text="المشتريات والضمان")
         self.notebook.add(self.excel_tab, text="استيراد وتصدير Excel")
         self._build_assets_tab()
         self._build_custody_tab()
         self._build_maintenance_tab()
         self._build_offices_tab()
         self._build_movements_tab()
+        self._build_purchases_tab()
         self._build_excel_tab()
 
     def _tree(
@@ -425,6 +429,36 @@ class AssetInventoryApp:
             {"date": 150, "asset": 200, "type": 150, "from": 150, "to": 150, "notes": 300},
         )
 
+    def _build_purchases_tab(self) -> None:
+        toolbar = ttk.Frame(self.purchases_tab)
+        toolbar.pack(fill="x", pady=(0, 10))
+        ttk.Label(toolbar, text="الأصل المرتبط بالفاتورة").pack(side="right", padx=(8, 4))
+        self.purchase_asset_choice = tk.StringVar()
+        self.purchase_asset_combo = ttk.Combobox(
+            toolbar, textvariable=self.purchase_asset_choice,
+            state="readonly", width=52,
+        )
+        self.purchase_asset_combo.pack(side="right", padx=4)
+        ttk.Button(toolbar, text="تسجيل فاتورة شراء", command=self.add_purchase_record).pack(side="left", padx=4)
+        ttk.Button(toolbar, text="تحديث السجل", command=self.refresh_purchases).pack(side="left", padx=4)
+        ttk.Label(
+            self.purchases_tab,
+            text="سجل الفواتير والضمانات المرتبطة بكل أصل. لا يغيّر تسجيل الفاتورة حالة الأصل أو بيانات العهدة.",
+            style="Muted.TLabel",
+        ).pack(anchor="e", pady=(0, 8))
+        self.purchases_tree = self._tree(
+            self.purchases_tab,
+            ("id", "asset", "supplier", "invoice", "purchase_date", "warranty", "total_cost", "notes"),
+            {
+                "id": "المعرّف", "asset": "الأصل", "supplier": "المورد",
+                "invoice": "رقم الفاتورة", "purchase_date": "تاريخ الشراء",
+                "warranty": "انتهاء الضمان", "total_cost": "القيمة",
+                "notes": "ملاحظات",
+            },
+            {"id": 180, "asset": 190, "supplier": 150, "invoice": 130,
+             "purchase_date": 110, "warranty": 110, "total_cost": 100, "notes": 220},
+        )
+
     def _build_excel_tab(self) -> None:
         panel = ttk.Frame(self.excel_tab)
         panel.pack(fill="x", pady=10)
@@ -457,6 +491,7 @@ class AssetInventoryApp:
         self.refresh_custody()
         self.refresh_maintenance()
         self.refresh_spare_parts()
+        self.refresh_purchases()
         self.refresh_offices()
         self.refresh_movements()
 
@@ -575,6 +610,37 @@ class AssetInventoryApp:
                 part.supplier or "—", "يحتاج تزويد" if low else "متوفر",
             ), tags=("low",) if low else ())
         self.spare_parts_tree.tag_configure("low", background="#fff0e8")
+
+    def refresh_purchases(self) -> None:
+        if not hasattr(self, "purchases_tree"):
+            return
+        with SessionLocal() as session:
+            assets = list_assets(session)
+            records = list_purchase_records(session)
+
+        self._purchase_asset_ids = {}
+        choices: list[str] = []
+        for asset in assets:
+            label = f"{asset.brand} {asset.model} — {asset.serial_number or asset.id[:8]}"
+            self._purchase_asset_ids[label] = asset.id
+            choices.append(label)
+        current_choice = self.purchase_asset_choice.get()
+        self.purchase_asset_combo.configure(values=choices)
+        if current_choice not in choices:
+            self.purchase_asset_choice.set(choices[0] if choices else "")
+
+        self.purchases_tree.delete(*self.purchases_tree.get_children())
+        for record in records:
+            self.purchases_tree.insert("", "end", iid=record.id, values=(
+                record.id,
+                record.asset_label,
+                record.supplier,
+                record.invoice_number,
+                record.purchase_date,
+                record.warranty_until or "—",
+                f"{record.total_cost:,.2f}",
+                record.notes or "—",
+            ))
 
     def _selected_custody(self) -> CustodyCard | None:
         selected = self.custody_tree.selection()
@@ -797,6 +863,59 @@ class AssetInventoryApp:
             self.refresh_all()
         except Exception as exc:
             messagebox.showerror("تعذر إلغاء الطلب", str(exc), parent=self.root)
+
+    def add_purchase_record(self) -> None:
+        asset_label = self.purchase_asset_choice.get()
+        asset_id = getattr(self, "_purchase_asset_ids", {}).get(asset_label)
+        if not asset_id:
+            messagebox.showinfo("اختر الأصل", "أضف أصلاً إلى سجل الجرد أولاً ثم اختره هنا.", parent=self.root)
+            return
+
+        supplier = simpledialog.askstring("فاتورة شراء", "اسم المورد:", parent=self.root)
+        if supplier is None:
+            return
+        invoice_number = simpledialog.askstring("فاتورة شراء", "رقم الفاتورة:", parent=self.root)
+        if invoice_number is None:
+            return
+        purchase_date = simpledialog.askstring(
+            "فاتورة شراء", "تاريخ الشراء (YYYY-MM-DD):",
+            initialvalue=datetime.now().date().isoformat(), parent=self.root,
+        )
+        if purchase_date is None:
+            return
+        warranty_until = simpledialog.askstring(
+            "الضمان", "تاريخ انتهاء الضمان (YYYY-MM-DD) — اتركه فارغاً إن لم يوجد:",
+            parent=self.root,
+        )
+        if warranty_until is None:
+            return
+        total_cost_text = simpledialog.askstring("قيمة الفاتورة", "إجمالي القيمة:", initialvalue="0", parent=self.root)
+        if total_cost_text is None:
+            return
+        try:
+            total_cost = float(total_cost_text.replace(",", ".").replace("٫", "."))
+        except ValueError:
+            messagebox.showerror("قيمة غير صحيحة", "أدخل قيمة رقمية صحيحة للفاتورة.", parent=self.root)
+            return
+        notes = simpledialog.askstring("ملاحظات الفاتورة", "ملاحظات (اختياري):", parent=self.root) or ""
+
+        try:
+            with SessionLocal() as session:
+                create_purchase_record(
+                    session,
+                    asset_id=asset_id,
+                    supplier=supplier,
+                    invoice_number=invoice_number,
+                    purchase_date=purchase_date,
+                    warranty_until=warranty_until,
+                    total_cost=total_cost,
+                    notes=notes,
+                    actor_name=self.actor_name,
+                )
+            self.refresh_purchases()
+            messagebox.showinfo("تم التسجيل", "تم ربط الفاتورة بالأصل وإضافتها إلى سجل المشتريات.", parent=self.root)
+        except Exception as exc:
+            messagebox.showerror("تعذر تسجيل الفاتورة", str(exc), parent=self.root)
 
     def add_spare_part(self) -> None:
         name = simpledialog.askstring("قطعة غيار", "اسم القطعة:", parent=self.root)
