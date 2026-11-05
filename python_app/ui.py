@@ -20,6 +20,7 @@ from .services.auth import (
     set_user_active,
     require_active_admin,
     require_active_user,
+    reset_user_password,
 )
 from .services.assets import (
     ASSET_CATEGORIES,
@@ -668,6 +669,7 @@ class AssetInventoryApp:
         toolbar.pack(fill="x", pady=(0, 10))
         ttk.Button(toolbar, text="إضافة مستخدم", command=self.add_local_user).pack(side="left", padx=4)
         ttk.Button(toolbar, text="تفعيل / إيقاف الحساب", command=self.toggle_selected_user).pack(side="left", padx=4)
+        ttk.Button(toolbar, text="إعادة تعيين كلمة المرور", command=self.reset_selected_user_password).pack(side="left", padx=4)
         ttk.Button(toolbar, text="تحديث القائمة", command=self.refresh_users).pack(side="left", padx=4)
         ttk.Label(
             self.users_tab,
@@ -1341,6 +1343,68 @@ class AssetInventoryApp:
             self.refresh_users()
         except Exception as exc:
             messagebox.showerror("تعذر تغيير حالة الحساب", str(exc), parent=self.root)
+
+    def reset_selected_user_password(self) -> None:
+        if not self._ensure_active_session(admin_only=True):
+            return
+        selected = self.users_tree.selection() if hasattr(self, "users_tree") else ()
+        if not selected:
+            messagebox.showinfo("تحديد مستخدم", "حدد حساباً من الجدول أولاً.", parent=self.root)
+            return
+        target_id = selected[0]
+        if target_id == self.user.id:
+            messagebox.showwarning(
+                "الحساب الحالي",
+                "استخدم زر تغيير كلمة المرور لتحديث كلمة مرور حسابك.",
+                parent=self.root,
+            )
+            return
+
+        temporary = simpledialog.askstring(
+            "إعادة تعيين كلمة المرور",
+            "أدخل كلمة مرور مؤقتة قوية (12 محرفاً على الأقل):",
+            show="*",
+            parent=self.root,
+        )
+        if temporary is None:
+            return
+        confirmation = simpledialog.askstring(
+            "تأكيد كلمة المرور المؤقتة",
+            "أعد إدخال كلمة المرور المؤقتة:",
+            show="*",
+            parent=self.root,
+        )
+        if confirmation is None:
+            return
+        if temporary != confirmation:
+            messagebox.showerror(
+                "كلمتا المرور غير متطابقتين",
+                "أعد العملية وتأكد من تطابق كلمتي المرور.",
+                parent=self.root,
+            )
+            return
+
+        try:
+            with SessionLocal() as session:
+                target = reset_user_password(
+                    session,
+                    self.user,
+                    target_id,
+                    temporary,
+                )
+            messagebox.showinfo(
+                "تمت إعادة تعيين كلمة المرور",
+                f"تم تعيين كلمة مرور مؤقتة للحساب {target.username}. "
+                "سيُجبر المستخدم على تغييرها عند تسجيل الدخول التالي.",
+                parent=self.root,
+            )
+            self.refresh_users()
+        except Exception as exc:
+            messagebox.showerror(
+                "تعذر إعادة تعيين كلمة المرور",
+                str(exc),
+                parent=self.root,
+            )
 
     def change_password(self) -> None:
         if not self._ensure_active_session():
