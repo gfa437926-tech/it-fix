@@ -2,27 +2,68 @@ const { app, BrowserWindow, shell } = require('electron');
 const path = require('node:path');
 
 const isDev = !app.isPackaged;
+
+function openExternalUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol === 'https:' || url.protocol === 'http:') {
+      return shell.openExternal(url.toString());
+    }
+  } catch {
+    // Ignore malformed or unsupported URLs.
+  }
+  return Promise.resolve();
+}
+
 function createWindow() {
   const win = new BrowserWindow({
-    width: 1440, height: 920, minWidth: 960, minHeight: 640,
+    width: 1440,
+    height: 920,
+    minWidth: 960,
+    minHeight: 640,
     title: 'IT Fix - Asset Management',
     backgroundColor: '#f5f7fb',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      webviewTag: false
     }
   });
-  if (isDev) win.loadURL('http://localhost:3000');
-  else win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+
+  // Keep the application inside its trusted local/dev origin.
+  win.webContents.on('will-navigate', (event, navigationUrl) => {
+    const isTrustedDevOrigin = isDev && navigationUrl.startsWith('http://localhost:3000');
+    const isAppFile = navigationUrl.startsWith('file://');
+    if (!isTrustedDevOrigin && !isAppFile) {
+      event.preventDefault();
+      void openExternalUrl(navigationUrl);
+    }
+  });
+
+  // Open ordinary web links in the user's default browser, never a new app window.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https://') || url.startsWith('http://')) shell.openExternal(url);
+    void openExternalUrl(url);
     return { action: 'deny' };
   });
+
+  if (isDev) {
+    void win.loadURL('http://localhost:3000');
+  } else {
+    void win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  }
 }
+
 app.whenReady().then(() => {
   createWindow();
-  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
 });
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
+});
