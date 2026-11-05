@@ -1,0 +1,252 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role-based access control",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "format": "email", "maxLength": 150 },
+        "role": { "type": "string", "enum": ["admin", "it_manager"] },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["displayName", "email", "role", "isActive", "createdAt"]
+    },
+    "Office": {
+      "title": "Office",
+      "description": "Location, office or department record",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 150 },
+        "building": { "type": "string", "maxLength": 100 },
+        "directorate": { "type": "string", "maxLength": 100 },
+        "department": { "type": "string", "maxLength": 100 },
+        "room": { "type": "string", "maxLength": 50 },
+        "manager": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["name", "isActive"]
+    },
+    "Asset": {
+      "title": "Asset",
+      "description": "IT Hardware or equipment asset record",
+      "type": "object",
+      "properties": {
+        "category": { "type": "string", "enum": ["desktop", "laptop", "monitor", "printer", "scanner", "network", "storage", "ups", "accessory", "other"] },
+        "brand": { "type": "string", "maxLength": 100 },
+        "model": { "type": "string", "maxLength": 100 },
+        "serialNumber": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["available", "assigned", "maintenance", "damaged", "retired", "returned"] },
+        "cpu": { "type": "string", "maxLength": 100 },
+        "ram": { "type": "string", "maxLength": 50 },
+        "storage": { "type": "string", "maxLength": 50 },
+        "officeId": { "type": "string", "maxLength": 128 },
+        "officeName": { "type": "string", "maxLength": 150 },
+        "receivedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["category", "brand", "model", "serialNumber", "status"]
+    },
+    "CustodyCard": {
+      "title": "CustodyCard",
+      "description": "Employee asset custody card with approval workflow",
+      "type": "object",
+      "properties": {
+        "assetId": { "type": "string", "maxLength": 128 },
+        "assetLabel": { "type": "string", "maxLength": 200 },
+        "employeeName": { "type": "string", "maxLength": 120 },
+        "officeName": { "type": "string", "maxLength": 150 },
+        "assignedAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["active", "returned", "rejected"] },
+        "approvalStatus": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "approvedBy": { "type": "string", "maxLength": 128 },
+        "approvedAt": { "type": "string", "format": "date-time" },
+        "rejectedBy": { "type": "string", "maxLength": 128 },
+        "rejectedAt": { "type": "string", "format": "date-time" },
+        "rejectionReason": { "type": "string", "maxLength": 500 },
+        "notes": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["assetId", "employeeName", "officeName", "status", "approvalStatus"]
+    },
+    "MaintenanceRecord": {
+      "title": "MaintenanceRecord",
+      "description": "Hardware maintenance and repair ticket",
+      "type": "object",
+      "properties": {
+        "assetId": { "type": "string", "maxLength": 128 },
+        "assetLabel": { "type": "string", "maxLength": 200 },
+        "title": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "priority": { "type": "string", "enum": ["low", "normal", "high", "urgent"] },
+        "status": { "type": "string", "enum": ["open", "inProgress", "completed", "cancelled"] },
+        "reportedAt": { "type": "string", "format": "date-time" },
+        "technician": { "type": "string", "maxLength": 100 },
+        "cost": { "type": "number" },
+        "partsCost": { "type": "number" },
+        "resolution": { "type": "string", "maxLength": 2000 },
+        "previousAssetStatus": { "type": "string", "maxLength": 50 },
+        "completedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["assetId", "assetLabel", "title", "description", "priority", "status"]
+    },
+    "SparePart": {
+      "title": "SparePart",
+      "description": "Spare parts inventory catalog and stock levels",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 150 },
+        "sku": { "type": "string", "maxLength": 80 },
+        "quantity": { "type": "number" },
+        "minimumQuantity": { "type": "number" },
+        "unitCost": { "type": "number" },
+        "supplier": { "type": "string", "maxLength": 150 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "sku", "quantity", "minimumQuantity", "unitCost"]
+    },
+    "MaintenancePart": {
+      "title": "MaintenancePart",
+      "description": "Consumed spare part for maintenance record",
+      "type": "object",
+      "properties": {
+        "partId": { "type": "string", "maxLength": 128 },
+        "partName": { "type": "string", "maxLength": 150 },
+        "maintenanceId": { "type": "string", "maxLength": 128 },
+        "assetId": { "type": "string", "maxLength": 128 },
+        "quantity": { "type": "number" },
+        "unitCost": { "type": "number" },
+        "totalCost": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 500 },
+        "usedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["partId", "maintenanceId", "assetId", "quantity", "unitCost", "totalCost"]
+    },
+    "PurchaseRecord": {
+      "title": "PurchaseRecord",
+      "description": "Equipment procurement invoice and warranty detail",
+      "type": "object",
+      "properties": {
+        "assetId": { "type": "string", "maxLength": 128 },
+        "assetLabel": { "type": "string", "maxLength": 200 },
+        "supplier": { "type": "string", "maxLength": 150 },
+        "invoiceNumber": { "type": "string", "maxLength": 100 },
+        "purchaseDate": { "type": "string", "format": "date-time" },
+        "warrantyUntil": { "type": "string", "format": "date-time" },
+        "totalCost": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["assetId", "assetLabel", "supplier", "invoiceNumber", "totalCost"]
+    },
+    "AssetMovement": {
+      "title": "AssetMovement",
+      "description": "Audit trail log of asset movements, transfers and custody lifecycle",
+      "type": "object",
+      "properties": {
+        "assetId": { "type": "string", "maxLength": 128 },
+        "assetLabel": { "type": "string", "maxLength": 200 },
+        "movementType": { "type": "string", "maxLength": 80 },
+        "occurredAt": { "type": "string", "format": "date-time" },
+        "fromEmployee": { "type": "string", "maxLength": 120 },
+        "toEmployee": { "type": "string", "maxLength": 120 },
+        "fromOffice": { "type": "string", "maxLength": 150 },
+        "toOffice": { "type": "string", "maxLength": 150 },
+        "custodyId": { "type": "string", "maxLength": 128 },
+        "maintenanceId": { "type": "string", "maxLength": 128 },
+        "purchaseId": { "type": "string", "maxLength": 128 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "cost": { "type": "number" }
+      },
+      "required": ["assetId", "assetLabel", "movementType"]
+    },
+    "AssetDocument": {
+      "title": "AssetDocument",
+      "description": "Document metadata for attachments like invoices, warranty cards and photos",
+      "type": "object",
+      "properties": {
+        "assetId": { "type": "string", "maxLength": 128 },
+        "purchaseRecordId": { "type": "string", "maxLength": 128 },
+        "fileName": { "type": "string", "maxLength": 255 },
+        "documentType": { "type": "string", "enum": ["invoice", "warranty", "handover", "maintenance", "photo", "other"] },
+        "storagePath": { "type": "string", "maxLength": 500 },
+        "contentType": { "type": "string", "maxLength": 100 },
+        "sizeBytes": { "type": "number" },
+        "uploadedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["assetId", "fileName", "documentType", "storagePath", "uploadedBy"]
+    },
+    "ImportBatch": {
+      "title": "ImportBatch",
+      "description": "Audit log record for CSV or batch data import",
+      "type": "object",
+      "properties": {
+        "sourceName": { "type": "string", "maxLength": 255 },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "totalRows": { "type": "number" },
+        "attemptedRows": { "type": "number" },
+        "succeededRows": { "type": "number" },
+        "failedRows": { "type": "number" },
+        "skippedInvalidRows": { "type": "number" },
+        "status": { "type": "string", "enum": ["completed", "partial", "failed"] },
+        "rowErrors": { "type": "string" }
+      },
+      "required": ["sourceName", "createdBy", "totalRows", "succeededRows", "failedRows", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles and RBAC role definitions"
+    },
+    "/offices/{officeId}": {
+      "schema": { "$ref": "#/entities/Office" },
+      "description": "Directory of buildings, departments and offices"
+    },
+    "/assets/{assetId}": {
+      "schema": { "$ref": "#/entities/Asset" },
+      "description": "Primary IT asset inventory documents"
+    },
+    "/asset_serials/{serialId}": {
+      "schema": "string",
+      "description": "Atomic unique reservations for serial numbers"
+    },
+    "/custody_cards/{cardId}": {
+      "schema": { "$ref": "#/entities/CustodyCard" },
+      "description": "Staff asset assignment custody cards"
+    },
+    "/maintenance_records/{recordId}": {
+      "schema": { "$ref": "#/entities/MaintenanceRecord" },
+      "description": "Hardware maintenance, repairs and technical logs"
+    },
+    "/spare_parts/{partId}": {
+      "schema": { "$ref": "#/entities/SparePart" },
+      "description": "Spare parts catalog and inventory"
+    },
+    "/maintenance_parts/{usageId}": {
+      "schema": { "$ref": "#/entities/MaintenancePart" },
+      "description": "Consumed spare parts linked to maintenance jobs"
+    },
+    "/purchase_records/{purchaseId}": {
+      "schema": { "$ref": "#/entities/PurchaseRecord" },
+      "description": "Procurement invoices and supplier records"
+    },
+    "/asset_movements/{movementId}": {
+      "schema": { "$ref": "#/entities/AssetMovement" },
+      "description": "Audit trail log of all asset movements"
+    },
+    "/asset_documents/{documentId}": {
+      "schema": { "$ref": "#/entities/AssetDocument" },
+      "description": "Attachment metadata for asset documents"
+    },
+    "/import_batches/{batchId}": {
+      "schema": { "$ref": "#/entities/ImportBatch" },
+      "description": "Audit logs for CSV batch import jobs"
+    }
+  }
+}

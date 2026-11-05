@@ -1,0 +1,139 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userExists() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isSuperAdmin() {
+      return signedIn() && (
+        request.auth.token.email == 'gfa437926@gmail.com' ||
+        (userExists() && userDoc().role == 'admin')
+      );
+    }
+
+    function isActiveUser() {
+      return isSuperAdmin() || (userExists() && userDoc().isActive == true);
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() || (isActiveUser() && userDoc().role in ['admin', 'it_manager']);
+    }
+
+    // Health check endpoint for testing initial connection
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // User profiles & RBAC
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if signedIn() && (
+        isSuperAdmin() ||
+        request.auth.uid == uid
+      );
+      allow update: if signedIn() && (
+        isSuperAdmin() ||
+        (isActiveUser() && request.auth.uid == uid)
+      );
+      allow delete: if isSuperAdmin() && request.auth.uid != uid;
+    }
+
+    // Offices & locations
+    match /offices/{officeId} {
+      allow read: if isActiveUser();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Assets inventory
+    match /assets/{assetId} {
+      allow read: if isActiveUser();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Unique serial number reservations
+    match /asset_serials/{serialId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    // Custody assignments
+    match /custody_cards/{cardId} {
+      allow read: if isActiveUser();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Maintenance records and service history
+    match /maintenance_records/{recordId} {
+      allow read: if isActiveUser();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Spare parts catalog
+    match /spare_parts/{partId} {
+      allow read: if isActiveUser();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Maintenance parts consumption events
+    match /maintenance_parts/{usageId} {
+      allow read: if isActiveUser();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // Procurement invoices and warranties
+    match /purchase_records/{purchaseId} {
+      allow read: if isActiveUser();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Movements and audits timeline
+    match /asset_movements/{movementId} {
+      allow read: if isActiveUser();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // System settings and controller configuration
+    match /system_settings/{docId} {
+      allow read: if signedIn();
+      allow write: if signedIn();
+    }
+
+    // Documents and attachment metadata
+    match /asset_documents/{documentId} {
+      allow read: if isActiveUser();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Import batches audit
+    match /import_batches/{batchId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // General audit logs
+    match /audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,253 @@
+import {
+  collection,
+  doc,
+  onSnapshot,
+  runTransaction,
+  query,
+  orderBy,
+  getDocs,
+  serverTimestamp,
+} from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../firebase';
+import { Asset, AssetStatus, Office } from '../types';
+
+function normalizeSerial(serial: string): string {
+  return serial.trim().toUpperCase();
+}
+
+function serialToDocId(serial: string): string {
+  // Safe document ID from serial
+  try {
+    return btoa(unescape(encodeURIComponent(normalizeSerial(serial))))
+      .replace(/=/g, '')
+      .replace(/\//g, '_')
+      .replace(/\+/g, '-');
+  } catch {
+    return normalizeSerial(serial).replace(/[^a-zA-Z0-9_-]/g, '_');
+  }
+}
+
+export function watchAssets(
+  onData: (assets: Asset[]) => void,
+  onError?: (err: Error) => void
+) {
+  const assetsRef = collection(db, 'assets');
+  const q = query(assetsRef, orderBy('brand', 'asc'));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const assets = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      })) as Asset[];
+      onData(assets);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, 'assets');
+      onError?.(error as Error);
+    }
+  );
+}
+
+export async function createAsset(asset: Omit<Asset, 'id'> & { id?: string }, actorName: string = '') {
+  const assetId = asset.id || doc(collection(db, 'assets')).id;
+  const serial = normalizeSerial(asset.serialNumber);
+
+  try {
+    await runTransaction(db, async (tx) => {
+      const assetRef = doc(db, 'assets', assetId);
+      const assetSnap = await tx.get(assetRef);
+      if (assetSnap.exists()) {
+        throw new Error('معرف الأصل مستخدم مسبقاً');
+      }
+
+      let serialRef = null;
+      if (serial) {
+        serialRef = doc(db, 'asset_serials', serialToDocId(serial));
+        const serialSnap = await tx.get(serialRef);
+        if (serialSnap.exists()) {
+          throw new Error(`الرقم التسلسلي (${serial}) مسجل مسبقاً لجهاز آخر`);
+        }
+      }
+
+      const assetData = {
+        ...asset,
+        id: assetId,
+        serialNumber: serial,
+        receivedAt: asset.receivedAt || new Date().toISOString(),
+      };
+
+      tx.set(assetRef, assetData);
+
+      if (serialRef) {
+        tx.set(serialRef, {
+          assetId,
+          serialNumber: serial,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      // Record movement
+      const movementRef = doc(collection(db, 'asset_movements'));
+      tx.set(movementRef, {
+        assetId,
+        assetLabel: `${asset.brand} ${asset.model}`.trim(),
+        movementType: 'assigned',
+        toOffice: asset.officeName || 'المستودع الرئيسي',
+        toOfficeName: asset.officeName || 'المستودع الرئيسي',
+        toOfficeId: asset.officeId || '',
+        occurredAt: new Date().toISOString(),
+        notes: `إضافة أصل جديد بواسطة ${actorName || 'المسؤول'}`,
+      });
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `assets/${assetId}`);
+  }
+}
+
+export async function updateAsset(asset: Asset) {
+  const serial = normalizeSerial(asset.serialNumber);
+  const assetRef = doc(db, 'assets', asset.id);
+
+  try {
+    await runTransaction(db, async (tx) => {
+      const assetSnap = await tx.get(assetRef);
+      if (!assetSnap.exists()) {
+        throw new Error('الجهاز المراد تعديله غير موجود');
+      }
+
+      const oldData = assetSnap.data();
+      const oldSerial = normalizeSerial(oldData.serialNumber || '');
+      const serialChanged = oldSerial !== serial;
+
+      let oldSerialRef = null;
+      let newSerialRef = null;
+
+      if (oldSerial && serialChanged) {
+        oldSerialRef = doc(db, 'asset_serials', serialToDocId(oldSerial));
+      }
+
+      if (serial) {
+        newSerialRef = doc(db, 'asset_serials', serialToDocId(serial));
+        const newSerialSnap = await tx.get(newSerialRef);
+        if (newSerialSnap.exists() && newSerialSnap.data().assetId !== asset.id) {
+          throw new Error(`الرقم التسلسلي (${serial}) مسجل لجهاز آخر`);
+        }
+      }
+
+      tx.update(assetRef, {
+        ...asset,
+        serialNumber: serial,
+      });
+
+      if (serialChanged && oldSerialRef) {
+        tx.delete(oldSerialRef);
+      }
+
+      if (newSerialRef) {
+        tx.set(newSerialRef, {
+          assetId: asset.id,
+          serialNumber: serial,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `assets/${asset.id}`);
+  }
+}
+
+export async function transferAsset(
+  asset: Asset,
+  destination: Office,
+  notes: string = '',
+  actorName: string = ''
+) {
+  const assetRef = doc(db, 'assets', asset.id);
+  const officeRef = doc(db, 'offices', destination.id);
+
+  try {
+    await runTransaction(db, async (tx) => {
+      const assetSnap = await tx.get(assetRef);
+      const officeSnap = await tx.get(officeRef);
+
+      if (!assetSnap.exists()) throw new Error('الجهاز غير موجود');
+      if (!officeSnap.exists() || !officeSnap.data().isActive) {
+        throw new Error('المكتب الوجهة غير موجود أو غير فعال');
+      }
+
+      const currentStatus = assetSnap.data().status as AssetStatus;
+      if (currentStatus !== 'available' && currentStatus !== 'returned') {
+        throw new Error('لا يمكن نقل الجهاز إلا إذا كان متاحاً وغير مرتبط بعهدة نشطة أو صيانة');
+      }
+
+      const fromOfficeId = assetSnap.data().officeId || '';
+      const fromOfficeName = assetSnap.data().officeName || 'غير محدد';
+
+      if (fromOfficeId === destination.id) {
+        throw new Error('الجهاز موجود بالفعل في هذا المكتب');
+      }
+
+      const now = new Date().toISOString();
+
+      tx.update(assetRef, {
+        officeId: destination.id,
+        officeName: destination.name,
+        transferredAt: now,
+      });
+
+      const movementRef = doc(collection(db, 'asset_movements'));
+      tx.set(movementRef, {
+        assetId: asset.id,
+        assetLabel: `${asset.brand} ${asset.model}`.trim(),
+        movementType: 'transferred',
+        occurredAt: now,
+        fromOffice: fromOfficeName,
+        fromOfficeId,
+        fromOfficeName,
+        toOffice: destination.name,
+        toOfficeId: destination.id,
+        toOfficeName: destination.name,
+        notes: notes.trim() || `نقل بواسطة ${actorName || 'المسؤول'}`,
+      });
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `assets/${asset.id}`);
+  }
+}
+
+export async function retireAsset(asset: Asset, reason: string = '', actorName: string = '') {
+  const assetRef = doc(db, 'assets', asset.id);
+
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(assetRef);
+      if (!snap.exists()) throw new Error('الجهاز غير موجود');
+
+      const currentStatus = snap.data().status as AssetStatus;
+      if (currentStatus === 'retired') throw new Error('الجهاز مستبعد مسبقاً');
+      if (currentStatus === 'assigned' || currentStatus === 'maintenance') {
+        throw new Error('يجب إغلاق العهدة أو استلام الجهاز من الصيانة قبل استبعاده');
+      }
+
+      const now = new Date().toISOString();
+      tx.update(assetRef, {
+        status: 'retired',
+        retiredAt: now,
+        retirementReason: reason.trim(),
+      });
+
+      const movementRef = doc(collection(db, 'asset_movements'));
+      tx.set(movementRef, {
+        assetId: asset.id,
+        assetLabel: `${asset.brand} ${asset.model}`.trim(),
+        movementType: 'retired',
+        occurredAt: now,
+        notes: `سبب الاستبعاد: ${reason.trim()} (${actorName || 'المسؤول'})`,
+      });
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `assets/${asset.id}`);
+  }
+}

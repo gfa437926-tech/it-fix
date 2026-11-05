@@ -1,0 +1,6 @@
+{
+  "name": "منظومة جرد وإدارة أصول تقنية المعلومات",
+  "description": "نظام متكامل لإدارة وجرد أصول تقنية المعلومات والعهد والصيانة والمواقع مع دعم اللغة العربية وقواعد بيانات فايربيز.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

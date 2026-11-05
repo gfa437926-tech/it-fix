@@ -1,0 +1,20 @@
+{
+  "name": "منظومة جرد وإدارة أصول تقنية المعلومات",
+  "short_name": "الأصول والعهد",
+  "description": "نظام متكامل لإدارة وجرد أصول تقنية المعلومات وبطاقات العهدة الرسمية ومزامنة Google Sheets",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F4F7FA",
+  "theme_color": "#183B56",
+  "orientation": "any",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

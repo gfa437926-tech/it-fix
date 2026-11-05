@@ -1,0 +1,240 @@
+/**
+ * Service for Google Sheets and Google Drive integration
+ * Uses REST API with OAuth Bearer token obtained client-side
+ */
+
+export interface GoogleSpreadsheetInfo {
+  spreadsheetId: string;
+  spreadsheetUrl: string;
+  title: string;
+}
+
+/**
+ * Creates a new Google Spreadsheet in the user's Google Drive
+ */
+export async function createSpreadsheet(
+  accessToken: string,
+  title: string = 'منظومة جرد أصول وعهد تقنية المعلومات'
+): Promise<GoogleSpreadsheetInfo> {
+  const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      properties: {
+        title,
+      },
+      sheets: [
+        {
+          properties: {
+            title: 'الأجهزة والجرد',
+            gridProperties: { rowCount: 100, columnCount: 15 },
+          },
+        },
+        {
+          properties: {
+            title: 'بطاقات العهدة',
+            gridProperties: { rowCount: 100, columnCount: 12 },
+          },
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData?.error?.message || 'تعذر إنشاء جدول البيانات في Google Sheets');
+  }
+
+  const data = await response.json();
+  return {
+    spreadsheetId: data.spreadsheetId,
+    spreadsheetUrl: data.spreadsheetUrl,
+    title: data.properties.title,
+  };
+}
+
+/**
+ * Push all assets and custody cards to the Google Spreadsheet
+ */
+export async function syncDataToGoogleSheet(
+  accessToken: string,
+  spreadsheetId: string,
+  assets: any[],
+  custodyCards: any[]
+): Promise<void> {
+  // 1. Assets sheet headers and rows
+  const assetHeaders = [
+    'الرقم التعريفي (ID)',
+    'الشركة المصنعة',
+    'الموديل',
+    'التصنيف',
+    'الرقم التسلسلي (SN)',
+    'المكتب / الموقع',
+    'الحالة الحالية',
+    'المعالج (CPU)',
+    'الذاكرة (RAM)',
+    'التخزين',
+    'تاريخ الاستلام',
+  ];
+
+  const assetRows = assets.map((a) => [
+    a.id || '',
+    a.brand || '',
+    a.model || '',
+    a.category || '',
+    a.serialNumber || '',
+    a.officeName || 'المستودع الرئيسي',
+    a.status || 'available',
+    a.cpu || '',
+    a.ram || '',
+    a.storage || '',
+    a.receivedAt ? new Date(a.receivedAt).toLocaleDateString('ar-EG') : '',
+  ]);
+
+  // 2. Custody cards headers matching the official warehouse paper form
+  const custodyHeaders = [
+    'رقم بطاقة العهدة',
+    'الاسم الثلاثي للمسؤول',
+    'الصفة',
+    'المديرية',
+    'الدائرة',
+    'المكتب / الغرفة',
+    'مسلسل',
+    'اسم المادة',
+    'أوصافها',
+    'الوحدة',
+    'الكمية رقماً',
+    'الكمية كتابة',
+    'رمزها',
+    'بطاقتها',
+    'استلام العهدة - رقم المذكرة',
+    'استلام العهدة - تاريخها',
+    'إعادة العهدة - رقم المذكرة',
+    'إعادة العهدة - تاريخها',
+    'الرصيد',
+    'ملاحظات',
+  ];
+
+  const custodyRows: (string | number)[][] = [];
+
+  custodyCards.forEach((c) => {
+    const respName = c.responsibleName || c.employeeName || '';
+    const role = c.roleTitle || '';
+    const dir = c.directorate || '';
+    const dept = c.department || '';
+    const off = c.officeName || '';
+    const cardNum = c.cardNumber || c.id;
+
+    if (c.items && c.items.length > 0) {
+      c.items.forEach((item: any, idx: number) => {
+        custodyRows.push([
+          cardNum,
+          respName,
+          role,
+          dir,
+          dept,
+          off,
+          item.seq || idx + 1,
+          item.itemName || '',
+          item.itemDescription || '',
+          item.unit || 'جهاز',
+          item.quantityNumber ?? 1,
+          item.quantityText || 'واحد فقط',
+          item.itemCode || '',
+          item.cardCode || '',
+          item.receiptDocNumber || '',
+          item.receiptDate || (c.assignedAt ? new Date(c.assignedAt).toLocaleDateString('ar-EG') : ''),
+          item.returnDocNumber || '',
+          item.returnDate || '',
+          item.balance ?? 1,
+          item.notes || c.notes || '',
+        ]);
+      });
+    } else {
+      custodyRows.push([
+        cardNum,
+        respName,
+        role,
+        dir,
+        dept,
+        off,
+        1,
+        c.assetLabel || 'أصل تقني',
+        c.notes || '',
+        'جهاز',
+        1,
+        'واحد فقط',
+        c.assetId || '',
+        cardNum,
+        '',
+        c.assignedAt ? new Date(c.assignedAt).toLocaleDateString('ar-EG') : '',
+        '',
+        '',
+        1,
+        c.notes || '',
+      ]);
+    }
+  });
+
+  // Update sheets via batchUpdate values
+  const payload = {
+    valueInputOption: 'USER_ENTERED',
+    data: [
+      {
+        range: "'الأجهزة والجرد'!A1:K" + (assetRows.length + 1),
+        values: [assetHeaders, ...assetRows],
+      },
+      {
+        range: "'بطاقات العهدة'!A1:T" + (custodyRows.length + 1),
+        values: [custodyHeaders, ...custodyRows],
+      },
+    ],
+  };
+
+  const response = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData?.error?.message || 'تعذر إرسال البيانات إلى Google Sheets');
+  }
+}
+
+/**
+ * Fetch rows from Google Sheet to import or update in the app
+ */
+export async function fetchSheetValues(
+  accessToken: string,
+  spreadsheetId: string,
+  sheetName: string = 'الأجهزة والجرد'
+): Promise<string[][]> {
+  const encodedRange = encodeURIComponent(`${sheetName}!A1:Z500`);
+  const response = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodedRange}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData?.error?.message || 'تعذر جلب البيانات من Google Sheet');
+  }
+
+  const data = await response.json();
+  return data.values || [];
+}
