@@ -123,3 +123,7 @@ GitHub Actions workflows are provided for Windows installer and Android debug AP
 - Native Firebase JS Auth uses IndexedDB persistence so the session survives app restarts.
 - Web sign-in remains on Firebase's existing popup flow.
 - The native Firebase setup is incomplete until the Firebase Android app, SHA-1 fingerprints, and `google-services.json` are configured as described above.
+
+### Google Sheets capacity safety
+
+Before exporting a full inventory snapshot, the integration reads the grid dimensions of every worksheet and expands only the two required export tabs when more rows or columns are needed. Existing worksheet dimensions are never reduced. The preflight includes all tabs in the spreadsheet and refuses an expansion that would exceed Google Sheets' 10-million-cell spreadsheet limit, reporting the required cell count before any snapshot rows are written.
