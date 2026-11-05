@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 import {
   ShieldCheck,
   LogOut,
@@ -25,6 +26,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const isNativeApp = Capacitor.isNativePlatform();
 
   useEffect(() => {
     // Check if running in standalone mode (already installed desktop app)
@@ -64,38 +66,38 @@ export const Navbar: React.FC<NavbarProps> = ({
   const totalAlerts = pendingCustodyCount + lowStockCount;
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-30 no-print shadow-xs">
+    <header className="min-h-16 bg-white border-b border-slate-200 px-3 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2 sticky top-0 z-30 no-print shadow-xs">
       {/* Brand title */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <div className="w-10 h-10 rounded-xl bg-[#168C8C]/10 flex items-center justify-center text-[#168C8C] shadow-xs">
           <HardDrive className="w-5 h-5" />
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-bold text-lg text-[#183B56] tracking-tight">
+            <h1 className="font-bold text-sm sm:text-lg text-[#183B56] tracking-tight">
               METRA IT ASSETS
             </h1>
             <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[#168C8C]/10 text-[#168C8C]">
               Cloud Firestore
             </span>
           </div>
-          <p className="text-xs text-slate-500 font-medium">
+          <p className="text-[10px] sm:text-xs text-slate-500 font-medium">
             منظومة جرد وإدارة أصول تقنية المعلومات والعهد
           </p>
         </div>
       </div>
 
       {/* Right controls */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1 sm:gap-3">
         {/* Desktop Install App Button */}
-        {!isInstalled && (
+        {!isNativeApp && !isInstalled && (
           <button
             onClick={handleInstallClick}
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-[#168C8C] border border-teal-200 text-xs font-bold transition-all cursor-pointer shadow-2xs"
-            title="تثبيت التطبيق على سطح المكتب بنقرة واحدة"
+            title="تثبيت التطبيق على الجهاز"
           >
             <MonitorDown className="w-4 h-4" />
-            <span className="hidden sm:inline">تثبيت كتطبيق سطح مكتب</span>
+            <span className="hidden sm:inline">تثبيت التطبيق</span>
           </button>
         )}
 
@@ -108,12 +110,12 @@ export const Navbar: React.FC<NavbarProps> = ({
         )}
 
         {/* User Card */}
-        <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl">
+        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 px-2 sm:px-3 py-1.5 rounded-xl max-w-[48vw] sm:max-w-none">
           <div className="w-8 h-8 rounded-lg bg-[#183B56] text-white flex items-center justify-center font-bold text-sm">
             {profile?.displayName?.[0]?.toUpperCase() || <UserIcon className="w-4 h-4" />}
           </div>
           <div className="text-right">
-            <p className="text-xs font-bold text-[#183B56] leading-none">
+            <p className="text-[11px] sm:text-xs font-bold text-[#183B56] leading-none truncate max-w-28 sm:max-w-none">
               {profile?.displayName || user?.email?.split('@')[0]}
             </p>
             <div className="flex items-center gap-1 mt-0.5">
