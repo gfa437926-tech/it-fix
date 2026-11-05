@@ -121,3 +121,27 @@ def test_management_report_sanitizes_formula_like_text(tmp_path: Path) -> None:
             workbook.close()
     finally:
         session.close()
+
+
+
+def test_failed_management_report_export_preserves_existing_file(
+    tmp_path: Path, monkeypatch
+) -> None:
+    session = make_session()
+    target = tmp_path / "management-report.xlsx"
+    original = b"previous valid report bytes"
+    target.write_bytes(original)
+
+    def fail_save(_workbook, _path) -> None:
+        raise OSError("simulated disk write failure")
+
+    monkeypatch.setattr("python_app.services.reports.Workbook.save", fail_save)
+    try:
+        import pytest
+
+        with pytest.raises(OSError, match="simulated disk write failure"):
+            export_management_report(session, target)
+        assert target.read_bytes() == original
+        assert list(tmp_path.glob(".management-report.*.tmp.xlsx")) == []
+    finally:
+        session.close()
