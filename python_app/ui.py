@@ -1081,10 +1081,14 @@ class AssetInventoryApp:
             return
         try:
             with SessionLocal() as session:
+                entity_type = self.audit_entity_filter.get()
+                action = self.audit_action_filter.get()
                 count = export_audit_logs_to_csv(
                     session,
                     destination,
                     search=self.audit_search.get(),
+                    entity_type="" if entity_type == "الكل" else entity_type,
+                    action="" if action == "الكل" else action,
                     limit=10000,
                 )
             messagebox.showinfo(
