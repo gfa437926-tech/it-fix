@@ -9,6 +9,7 @@ on:
       - "public/**"
       - "electron/**"
       - "package.json"
+      - "firebase-applet-config.json"
       - "package-lock.json"
       - "vite.config.ts"
       - "tsconfig*.json"
