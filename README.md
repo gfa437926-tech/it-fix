@@ -67,6 +67,8 @@ cd android
 
 The debug APK is produced at `android/app/build/outputs/apk/debug/app-debug.apk`.
 
+Google Sheets synchronization writes a complete snapshot of the current assets and custody cards. After a successful write, it clears trailing rows from older, larger exports so records deleted from the app are not left visible as stale spreadsheet entries. Manual linking verifies access and the two required worksheet names before saving the connection; linking alone is not reported as a successful synchronization.
+
 ### Firebase Android setup
 
 1. In Firebase Console, open the Firebase project already used by this application.
