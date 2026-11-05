@@ -19,6 +19,12 @@ from sqlalchemy.engine import make_url
 from ..config import DATA_DIR
 
 
+_MAX_BACKUP_MEMBERS = 10_002
+_MAX_BACKUP_MEMBER_BYTES = 512 * 1024 * 1024
+_MAX_BACKUP_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
+_MAX_BACKUP_MANIFEST_BYTES = 8 * 1024 * 1024
+
+
 @dataclass(frozen=True, slots=True)
 class BackupResult:
     file_path: Path
@@ -224,6 +230,21 @@ def _safe_zip_member(name: str) -> bool:
     return all(part not in {"", ".", ".."} for part in parts)
 
 
+def _validate_archive_limits(infos: list[zipfile.ZipInfo]) -> None:
+    if len(infos) > _MAX_BACKUP_MEMBERS:
+        raise ValueError("النسخة الاحتياطية تحتوي عدداً كبيراً جداً من الملفات.")
+
+    total_bytes = 0
+    for info in infos:
+        if info.file_size < 0 or info.file_size > _MAX_BACKUP_MEMBER_BYTES:
+            raise ValueError("أحد ملفات النسخة الاحتياطية يتجاوز الحجم المسموح.")
+        if info.filename == "manifest.json" and info.file_size > _MAX_BACKUP_MANIFEST_BYTES:
+            raise ValueError("ملف manifest داخل النسخة الاحتياطية أكبر من الحجم المسموح.")
+        total_bytes += info.file_size
+        if total_bytes > _MAX_BACKUP_TOTAL_BYTES:
+            raise ValueError("الحجم الإجمالي لمحتويات النسخة الاحتياطية يتجاوز الحد المسموح.")
+
+
 def _zip_member_digest(archive: zipfile.ZipFile, member: str) -> tuple[int, str]:
     digest = hashlib.sha256()
     size = 0
@@ -242,6 +263,7 @@ def verify_backup_archive(archive_path: str | Path) -> BackupVerificationResult:
     try:
         with zipfile.ZipFile(source, "r") as archive:
             infos = archive.infolist()
+            _validate_archive_limits(infos)
             names = [item.filename for item in infos]
             if len(names) != len(set(names)):
                 raise ValueError("الأرشيف يحتوي أسماء ملفات مكررة.")
