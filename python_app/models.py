@@ -302,3 +302,25 @@ class AssetDocument(Base):
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     uploaded_by: Mapped[str] = mapped_column(String(160), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class AppUser(Base):
+    __tablename__ = "app_users"
+    __table_args__ = (
+        CheckConstraint("role in ('admin','it_manager')", name="ck_app_user_role"),
+        CheckConstraint("failed_login_attempts >= 0", name="ck_app_user_failed_attempts"),
+        Index("ix_app_users_active_role", "is_active", "role"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(320), nullable=False)
+    role: Mapped[str] = mapped_column(String(24), nullable=False, default="it_manager")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
