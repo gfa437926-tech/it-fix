@@ -16,7 +16,6 @@ from sqlalchemy import Engine
 from sqlalchemy.engine import make_url
 
 from ..config import DATA_DIR
-from .documents import MAX_DOCUMENT_SIZE_BYTES
 
 
 @dataclass(frozen=True, slots=True)
