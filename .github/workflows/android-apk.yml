@@ -79,7 +79,7 @@ jobs:
               marker = "dependencies {"
               if marker not in root:
                   raise SystemExit("Could not locate root Gradle dependencies block")
-              root = root.replace(marker, marker + "\\n        " + plugin_classpath, 1)
+              root = root.replace(marker, marker + "\n        " + plugin_classpath, 1)
               root_gradle.write_text(root)
 
           plugin_apply = "apply plugin: 'com.google.gms.google-services'"
@@ -87,7 +87,7 @@ jobs:
               marker = "apply plugin: 'com.android.application'"
               if marker not in app:
                   raise SystemExit("Could not locate Android application plugin")
-              app = app.replace(marker, marker + "\\n" + plugin_apply, 1)
+              app = app.replace(marker, marker + "\n" + plugin_apply, 1)
               app_gradle.write_text(app)
           PY
           fi
