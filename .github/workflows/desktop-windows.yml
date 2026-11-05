@@ -1,0 +1,45 @@
+name: Windows Desktop Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "electron/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.ts"
+      - "tsconfig*.json"
+      - ".github/workflows/desktop-windows.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: TypeScript validation
+        run: npm run lint
+      - name: Build web application
+        run: npm run build
+      - name: Package Windows installer
+        run: npx electron-builder --win nsis
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: IT-Fix-Windows-Installer
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 14
