@@ -138,6 +138,16 @@ async function ensureSheetCapacity(
     };
   }>;
 
+  // Google Sheets enforces a 10-million-cell limit across the entire
+  // spreadsheet, not separately for each tab. Include unrelated tabs in the
+  // capacity calculation so an expansion cannot repeatedly fail at the API.
+  const maxSpreadsheetCells = 10_000_000;
+  let projectedCellCount = 0;
+  for (const entry of sheets) {
+    const grid = entry.properties?.gridProperties;
+    projectedCellCount += (grid?.rowCount || 0) * (grid?.columnCount || 0);
+  }
+
   const requests: Array<{
     updateSheetProperties: {
       properties: {
@@ -159,8 +169,19 @@ async function ensureSheetCapacity(
 
     const currentRows = properties?.gridProperties?.rowCount || 0;
     const currentColumns = properties?.gridProperties?.columnCount || 0;
+    if (
+      !Number.isSafeInteger(requirement.rows) ||
+      !Number.isSafeInteger(requirement.columns) ||
+      requirement.rows < 1 ||
+      requirement.columns < 1
+    ) {
+      throw new Error(`أبعاد البيانات المطلوبة لورقة "${requirement.title}" غير صالحة.`);
+    }
+
     const nextRows = Math.max(currentRows, requirement.rows);
     const nextColumns = Math.max(currentColumns, requirement.columns);
+    projectedCellCount +=
+      nextRows * nextColumns - currentRows * currentColumns;
 
     if (nextRows !== currentRows || nextColumns !== currentColumns) {
       requests.push({
@@ -173,6 +194,12 @@ async function ensureSheetCapacity(
         },
       });
     }
+  }
+
+  if (projectedCellCount > maxSpreadsheetCells) {
+    throw new Error(
+      `لا يمكن توسيع جدول Google Sheets بأمان: الحجم المطلوب ${projectedCellCount.toLocaleString('en-US')} خلية، والحد الأقصى المسموح به هو ${maxSpreadsheetCells.toLocaleString('en-US')} خلية لكل جدول. قلّل حجم البيانات أو استخدم جدولاً جديداً.`
+    );
   }
 
   if (requests.length === 0) return;
