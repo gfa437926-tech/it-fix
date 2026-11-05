@@ -106,6 +106,27 @@ def test_only_active_admin_can_create_users(session: Session) -> None:
         )
 
 
+def test_stale_admin_object_cannot_create_users_after_deactivation(session: Session) -> None:
+    admin = bootstrap_first_admin(session, "rootuser", "مدير أول", "Secure-Password-2026!")
+    second_admin = create_user(
+        session, admin, "second.admin", "مدير ثان",
+        "Second-Admin-Password-2026!", "admin",
+    )
+    set_user_active(session, second_admin, admin.id, False)
+
+    # Simulate an old in-memory user object still carrying the former role state.
+    admin.is_active = True
+    admin.role = "admin"
+
+    with pytest.raises(PermissionError, match="مدير نظام نشط"):
+        create_user(
+            session, admin, "blocked.user", "حساب غير مسموح",
+            "Blocked-Password-2026!", "it_manager",
+        )
+
+    assert session.scalar(select(AppUser).where(AppUser.username == "blocked.user")) is None
+
+
 def test_last_active_admin_cannot_be_deactivated(session: Session) -> None:
     admin = bootstrap_first_admin(session, "rootuser", "مدير", "Secure-Password-2026!")
 
