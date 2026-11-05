@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+import webbrowser
 from datetime import datetime
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Any
@@ -8,7 +9,7 @@ from typing import Any
 from sqlalchemy import select
 
 from .database import SessionLocal, database_health
-from .models import Asset, Office
+from .models import Asset, AssetDocument, Office
 from .services.assets import (
     ASSET_CATEGORIES,
     ASSET_STATUSES,
@@ -24,6 +25,7 @@ from .services.assets import (
     update_asset,
 )
 from .services.purchases import create_purchase_record, list_purchase_records
+from .services.documents import attach_asset_document, list_asset_documents, resolve_asset_document_path
 from .services.excel_service import (
     CATEGORY_LABELS,
     STATUS_LABELS,
@@ -280,6 +282,7 @@ class AssetInventoryApp:
         self.offices_tab = ttk.Frame(self.notebook, padding=12)
         self.movements_tab = ttk.Frame(self.notebook, padding=12)
         self.purchases_tab = ttk.Frame(self.notebook, padding=12)
+        self.documents_tab = ttk.Frame(self.notebook, padding=12)
         self.excel_tab = ttk.Frame(self.notebook, padding=12)
         self.notebook.add(self.assets_tab, text="الأصول والأجهزة")
         self.notebook.add(self.custody_tab, text="بطاقات العهدة")
@@ -287,6 +290,7 @@ class AssetInventoryApp:
         self.notebook.add(self.offices_tab, text="المكاتب والمواقع")
         self.notebook.add(self.movements_tab, text="سجل الحركات")
         self.notebook.add(self.purchases_tab, text="المشتريات والضمان")
+        self.notebook.add(self.documents_tab, text="مرفقات الأصول")
         self.notebook.add(self.excel_tab, text="استيراد وتصدير Excel")
         self._build_assets_tab()
         self._build_custody_tab()
@@ -294,6 +298,7 @@ class AssetInventoryApp:
         self._build_offices_tab()
         self._build_movements_tab()
         self._build_purchases_tab()
+        self._build_documents_tab()
         self._build_excel_tab()
 
     def _tree(
@@ -459,6 +464,37 @@ class AssetInventoryApp:
              "purchase_date": 110, "warranty": 110, "total_cost": 100, "notes": 220},
         )
 
+    def _build_documents_tab(self) -> None:
+        toolbar = ttk.Frame(self.documents_tab)
+        toolbar.pack(fill="x", pady=(0, 10))
+        ttk.Label(toolbar, text="الأصل").pack(side="right", padx=(8, 4))
+        self.document_asset_choice = tk.StringVar()
+        self.document_asset_combo = ttk.Combobox(
+            toolbar, textvariable=self.document_asset_choice,
+            state="readonly", width=48,
+        )
+        self.document_asset_combo.pack(side="right", padx=4)
+        self.document_asset_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_documents())
+        ttk.Button(toolbar, text="إرفاق مستند", command=self.attach_document).pack(side="left", padx=4)
+        ttk.Button(toolbar, text="فتح المرفق", command=self.open_selected_document).pack(side="left", padx=4)
+        ttk.Button(toolbar, text="تحديث", command=self.refresh_documents).pack(side="left", padx=4)
+        ttk.Label(
+            self.documents_tab,
+            text="المرفقات تحفظ محلياً في مجلد البيانات، وتُربط بمعرّف الأصل. الأنواع المقبولة PDF وPNG وJPG وTXT، بحد أقصى 20 ميغابايت.",
+            style="Muted.TLabel", wraplength=1000, justify="right",
+        ).pack(anchor="e", pady=(0, 8))
+        self.documents_tree = self._tree(
+            self.documents_tab,
+            ("id", "file", "type", "content_type", "size", "uploaded", "date"),
+            {
+                "id": "المعرّف", "file": "اسم الملف", "type": "التصنيف",
+                "content_type": "نوع المحتوى", "size": "الحجم", "uploaded": "أضيف بواسطة",
+                "date": "تاريخ الإرفاق",
+            },
+            {"id": 180, "file": 250, "type": 100, "content_type": 150,
+             "size": 100, "uploaded": 150, "date": 120},
+        )
+
     def _build_excel_tab(self) -> None:
         panel = ttk.Frame(self.excel_tab)
         panel.pack(fill="x", pady=10)
@@ -492,6 +528,7 @@ class AssetInventoryApp:
         self.refresh_maintenance()
         self.refresh_spare_parts()
         self.refresh_purchases()
+        self.refresh_documents()
         self.refresh_offices()
         self.refresh_movements()
 
@@ -641,6 +678,106 @@ class AssetInventoryApp:
                 f"{record.total_cost:,.2f}",
                 record.notes or "—",
             ))
+
+    def refresh_documents(self) -> None:
+        if not hasattr(self, "documents_tree"):
+            return
+        with SessionLocal() as session:
+            assets = list_assets(session)
+            selected_asset_id = getattr(self, "_document_asset_ids", {}).get(
+                self.document_asset_choice.get()
+            )
+            if selected_asset_id not in {asset.id for asset in assets}:
+                selected_asset_id = assets[0].id if assets else None
+            documents = list_asset_documents(session, selected_asset_id) if selected_asset_id else []
+
+        self._document_asset_ids = {}
+        choices: list[str] = []
+        for asset in assets:
+            label = f"{asset.brand} {asset.model} — {asset.serial_number or asset.id[:8]}"
+            self._document_asset_ids[label] = asset.id
+            choices.append(label)
+        self.document_asset_combo.configure(values=choices)
+        selected_label = next(
+            (label for label, asset_id in self._document_asset_ids.items() if asset_id == selected_asset_id),
+            "",
+        )
+        self.document_asset_choice.set(selected_label)
+
+        self.documents_tree.delete(*self.documents_tree.get_children())
+        type_labels = {
+            "invoice": "فاتورة", "warranty": "ضمان", "manual": "دليل",
+            "photo": "صورة", "other": "أخرى",
+        }
+        for document in documents:
+            self.documents_tree.insert("", "end", iid=document.id, values=(
+                document.id,
+                document.file_name,
+                type_labels.get(document.document_type, document.document_type),
+                document.content_type,
+                f"{document.size_bytes / 1024:.1f} KB",
+                document.uploaded_by,
+                _display_date(document.created_at),
+            ))
+
+    def attach_document(self) -> None:
+        asset_label = self.document_asset_choice.get()
+        asset_id = getattr(self, "_document_asset_ids", {}).get(asset_label)
+        if not asset_id:
+            messagebox.showinfo("اختر الأصل", "اختر الأصل الذي تريد إرفاق المستند به.", parent=self.root)
+            return
+        source = filedialog.askopenfilename(
+            parent=self.root,
+            title="اختر مستند الأصل",
+            filetypes=[("مستندات مسموحة", "*.pdf *.png *.jpg *.jpeg *.txt")],
+        )
+        if not source:
+            return
+        raw_type = simpledialog.askstring(
+            "تصنيف المستند",
+            "اكتب التصنيف: invoice / warranty / manual / photo / other",
+            initialvalue="other",
+            parent=self.root,
+        )
+        if raw_type is None:
+            return
+        type_map = {
+            "فاتورة": "invoice", "ضمان": "warranty", "دليل": "manual",
+            "صورة": "photo", "أخرى": "other",
+        }
+        document_type = type_map.get(raw_type.strip(), raw_type.strip().lower())
+        try:
+            with SessionLocal() as session:
+                document = attach_asset_document(
+                    session,
+                    asset_id=asset_id,
+                    source_path=source,
+                    uploaded_by=self.actor_name,
+                    document_type=document_type,
+                )
+            self.refresh_documents()
+            messagebox.showinfo(
+                "تم إرفاق المستند",
+                f"تم حفظ {document.file_name} وربطه بالأصل المحدد.",
+                parent=self.root,
+            )
+        except Exception as exc:
+            messagebox.showerror("تعذر إرفاق المستند", str(exc), parent=self.root)
+
+    def open_selected_document(self) -> None:
+        selected = self.documents_tree.selection()
+        if not selected:
+            messagebox.showinfo("فتح المرفق", "حدد مستنداً من الجدول أولاً.", parent=self.root)
+            return
+        try:
+            with SessionLocal() as session:
+                document = session.get(AssetDocument, selected[0])
+                if document is None:
+                    raise ValueError("المرفق لم يعد موجوداً في قاعدة البيانات.")
+                path = resolve_asset_document_path(document)
+            webbrowser.open(path.as_uri())
+        except Exception as exc:
+            messagebox.showerror("تعذر فتح المرفق", str(exc), parent=self.root)
 
     def _selected_custody(self) -> CustodyCard | None:
         selected = self.custody_tree.selection()
