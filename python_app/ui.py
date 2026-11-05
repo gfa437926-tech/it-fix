@@ -298,10 +298,10 @@ class AssetInventoryApp:
         search = ttk.Entry(toolbar, textvariable=self.asset_search, width=32, justify="right")
         search.pack(side="right", padx=(0, 8))
         search.bind("<KeyRelease>", lambda _event: self.refresh_assets())
-        self.asset_status_filter = tk.StringVar(value="all")
+        self.asset_status_filter = tk.StringVar(value="جميع الحالات")
         ttk.Combobox(
             toolbar, textvariable=self.asset_status_filter,
-            values=["all", *sorted(ASSET_STATUSES)], state="readonly", width=16,
+            values=["جميع الحالات", *STATUS_OPTIONS.keys()], state="readonly", width=16,
         ).pack(side="right", padx=6)
         ttk.Button(toolbar, text="تصفية", command=self.refresh_assets).pack(side="right", padx=4)
         ttk.Button(toolbar, text="إضافة أصل", command=self.add_asset).pack(side="left", padx=4)
@@ -384,7 +384,8 @@ class AssetInventoryApp:
         with SessionLocal() as session:
             assets = list_assets(
                 session, self.asset_search.get() if hasattr(self, "asset_search") else "",
-                self.asset_status_filter.get() if hasattr(self, "asset_status_filter") else "all",
+                STATUS_OPTIONS.get(self.asset_status_filter.get(), "all")
+                if hasattr(self, "asset_status_filter") else "all",
             )
         self.assets_tree.delete(*self.assets_tree.get_children())
         for asset in assets:
@@ -486,7 +487,12 @@ class AssetInventoryApp:
         )
         if not choice:
             return
-        destination = next((office for office in offices if office.name == choice.strip()), None)
+        destination_by_label = {
+            f"{office.name} — {office.building or 'بدون مبنى'}": office for office in offices
+        }
+        destination = destination_by_label.get(choice.strip())
+        if destination is None:
+            destination = next((office for office in offices if office.name == choice.strip()), None)
         if destination is None:
             messagebox.showerror("اختيار غير صحيح", "لم أتعرف على اسم المكتب المدخل.", parent=self.root)
             return
