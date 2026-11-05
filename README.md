@@ -87,6 +87,8 @@ Before native Google sign-in can work on a device:
 6. Run `npm run android:sync` again, then build and test on a real Android device.
 7. For GitHub Actions APK builds that must support native sign-in, add a repository Actions secret named `FIREBASE_ANDROID_CONFIG` containing the **base64-encoded contents** of `google-services.json`. The workflow writes it into the generated Android app only during the build and conditionally configures the Google Services Gradle plugin; neither the JSON file nor credentials are committed.
 
+The native sign-in flow deliberately discards the plugin's access token after exchanging the ID token into Firebase JS Auth; that token is not assumed to include Sheets/Drive scopes. The primary-controller UI also trusts only the UID recorded in `system_settings/controller`, matching the Firestore authorization rule.
+
 The native Google provider is configured in `capacitor.config.ts`. The Firebase Authentication plugin signs in natively and the app bridges the Google ID token into the Firebase JS SDK. Google Sheets API access still requires a separate OAuth access-token/scope flow; a successful Firebase sign-in alone does not grant Sheets API access. Until that native scope-consent flow is implemented, the app deliberately reports that Sheets/Drive authorization is unavailable on Android rather than passing an access token that may not carry the required scopes. The existing web popup continues to request the configured Sheets and Drive scopes.
 
 ## Firestore security rules
