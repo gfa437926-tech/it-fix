@@ -299,6 +299,40 @@ def set_user_active(
     return user
 
 
+def reset_user_password(
+    session: Session,
+    actor: AppUser,
+    target_user_id: str,
+    temporary_password: str,
+) -> AppUser:
+    """Admin-only reset; the affected user must change it at next sign-in."""
+    validate_password(temporary_password)
+    with session.begin():
+        current_actor = _require_active_admin(session, actor)
+        user = session.get(AppUser, target_user_id)
+        if user is None:
+            raise ValueError("الحساب المطلوب غير موجود.")
+        if not user.is_active:
+            raise ValueError("لا يمكن تعيين كلمة مرور لحساب موقوف؛ فعّل الحساب أولاً.")
+        if user.id == current_actor.id:
+            raise ValueError("استخدم شاشة تغيير كلمة المرور لحسابك الشخصي.")
+        user.password_hash = _password_hash(temporary_password)
+        user.must_change_password = True
+        user.failed_login_attempts = 0
+        user.locked_until = None
+        user.updated_at = utc_now()
+        session.add(AuditLog(
+            entity_type="app_user",
+            entity_id=user.id,
+            action="password_reset",
+            actor_name=current_actor.display_name,
+            details="إعادة تعيين كلمة المرور للحساب " + user.username
+            + " مع فرض تغييرها عند تسجيل الدخول التالي.",
+        ))
+        session.flush()
+    return user
+
+
 def change_own_password(
     session: Session,
     user_id: str,
