@@ -341,6 +341,71 @@ class AssetInventoryApp:
         )
         self.assets_tree.bind("<Double-1>", lambda _event: self.edit_asset())
 
+    def _build_custody_tab(self) -> None:
+        toolbar = ttk.Frame(self.custody_tab)
+        toolbar.pack(fill="x", pady=(0, 10))
+        ttk.Button(toolbar, text="إنشاء بطاقة عهدة", command=self.add_custody_card).pack(side="left", padx=4)
+        ttk.Button(toolbar, text="اعتماد البطاقة", command=self.approve_selected_custody).pack(side="left", padx=4)
+        ttk.Button(toolbar, text="رفض البطاقة", command=self.reject_selected_custody).pack(side="left", padx=4)
+        ttk.Button(toolbar, text="إرجاع العهدة", command=self.return_selected_custody).pack(side="left", padx=4)
+        columns = ("id", "number", "employee", "office", "items", "status", "approval")
+        self.custody_tree = self._tree(
+            self.custody_tab, columns,
+            {
+                "id": "المعرّف", "number": "رقم البطاقة", "employee": "المسؤول",
+                "office": "المكتب", "items": "عدد البنود", "status": "حالة العهدة",
+                "approval": "حالة الاعتماد",
+            },
+            {"id": 210, "number": 120, "employee": 170, "office": 160, "items": 90, "status": 120, "approval": 120},
+        )
+
+    def _build_maintenance_tab(self) -> None:
+        sub_tabs = ttk.Notebook(self.maintenance_tab)
+        sub_tabs.pack(fill="both", expand=True)
+        self.maintenance_requests_tab = ttk.Frame(sub_tabs, padding=10)
+        self.spare_parts_tab = ttk.Frame(sub_tabs, padding=10)
+        sub_tabs.add(self.maintenance_requests_tab, text="طلبات الصيانة")
+        sub_tabs.add(self.spare_parts_tab, text="مخزون قطع الغيار")
+
+        ticket_toolbar = ttk.Frame(self.maintenance_requests_tab)
+        ticket_toolbar.pack(fill="x", pady=(0, 10))
+        ttk.Button(ticket_toolbar, text="فتح طلب صيانة", command=self.add_maintenance_ticket).pack(side="left", padx=4)
+        ttk.Button(ticket_toolbar, text="بدء التنفيذ", command=self.start_selected_maintenance).pack(side="left", padx=4)
+        ttk.Button(ticket_toolbar, text="إكمال الطلب", command=self.complete_selected_maintenance).pack(side="left", padx=4)
+        ttk.Button(ticket_toolbar, text="إلغاء الطلب", command=self.cancel_selected_maintenance).pack(side="left", padx=4)
+        self.maintenance_tree = self._tree(
+            self.maintenance_requests_tab,
+            ("id", "asset", "title", "priority", "status", "technician", "parts_cost", "reported"),
+            {
+                "id": "المعرّف", "asset": "الأصل", "title": "عنوان العطل",
+                "priority": "الأولوية", "status": "الحالة", "technician": "الفني",
+                "parts_cost": "تكلفة القطع", "reported": "تاريخ البلاغ",
+            },
+            {"id": 200, "asset": 180, "title": 190, "priority": 100, "status": 110, "technician": 140, "parts_cost": 100, "reported": 120},
+        )
+
+        part_toolbar = ttk.Frame(self.spare_parts_tab)
+        part_toolbar.pack(fill="x", pady=(0, 10))
+        ttk.Button(part_toolbar, text="إضافة قطعة غيار", command=self.add_spare_part).pack(side="left", padx=4)
+        ttk.Label(part_toolbar, text="طلب الصيانة").pack(side="right", padx=(8, 4))
+        self.maintenance_ticket_choice = tk.StringVar()
+        self.maintenance_ticket_combo = ttk.Combobox(
+            part_toolbar, textvariable=self.maintenance_ticket_choice,
+            state="readonly", width=48,
+        )
+        self.maintenance_ticket_combo.pack(side="right", padx=4)
+        ttk.Button(part_toolbar, text="صرف للطلب المحدد", command=self.consume_selected_spare_part).pack(side="left", padx=4)
+        self.spare_parts_tree = self._tree(
+            self.spare_parts_tab,
+            ("id", "sku", "name", "quantity", "minimum", "unit_cost", "supplier", "stock"),
+            {
+                "id": "المعرّف", "sku": "الرمز", "name": "قطعة الغيار",
+                "quantity": "المتوفر", "minimum": "الحد الأدنى", "unit_cost": "سعر الوحدة",
+                "supplier": "المورد", "stock": "تنبيه المخزون",
+            },
+            {"id": 200, "sku": 130, "name": 210, "quantity": 90, "minimum": 90, "unit_cost": 100, "supplier": 150, "stock": 120},
+        )
+
     def _build_offices_tab(self) -> None:
         toolbar = ttk.Frame(self.offices_tab)
         toolbar.pack(fill="x", pady=(0, 10))
