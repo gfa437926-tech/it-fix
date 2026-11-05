@@ -178,24 +178,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const requestGoogleAccessToken = async (): Promise<string | null> => {
+    // Firebase's native Google sign-in authenticates the user, but it does not
+    // guarantee the additional Sheets/Drive OAuth scopes requested by googleProvider.
+    // Never return an unverified token and let the Sheets integration fail later.
+    if (Capacitor.isNativePlatform()) {
+      throw new Error(
+        'تسجيل الدخول عبر Google يعمل على Android، لكن منح صلاحيات Google Sheets وDrive يحتاج موافقة OAuth إضافية. استخدم نسخة الويب لهذه العملية حالياً.'
+      );
+    }
+
     try {
-      let token: string | null = null;
-      if (Capacitor.isNativePlatform()) {
-        const nativeResult = await FirebaseAuthentication.signInWithGoogle();
-        const idToken = nativeResult.credential?.idToken;
-        if (!idToken) throw new Error('لم يُرجع Google رمز الهوية. تحقق من إعداد SHA-1 وملف google-services.json.');
-        const credential = GoogleAuthProvider.credential(idToken);
-        await signInWithCredential(auth, credential);
-        token = nativeResult.credential?.accessToken || null;
-      } else {
-        const result = await signInWithPopup(auth, googleProvider);
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-        token = credential?.accessToken || null;
+      const result = await signInWithPopup(auth, googleProvider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const token = credential?.accessToken || null;
+      if (!token) {
+        throw new Error('لم يتم الحصول على رمز وصول Google. أعد تسجيل الدخول ووافق على صلاحيات Sheets وDrive.');
       }
-      if (token) {
-        inMemoryAccessToken = token;
-        setGoogleAccessToken(token);
-      }
+      inMemoryAccessToken = token;
+      setGoogleAccessToken(token);
       return token;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -204,7 +204,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         !msg.includes('cancelled-popup-request') &&
         !msg.includes('popup-blocked')
       ) {
-        console.error('Re-auth for Google token failed', err);
+        console.error('Re-auth for Google API access failed', err);
       }
       throw err;
     }
