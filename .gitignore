@@ -6,3 +6,10 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Electron / Android build artifacts
+release/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
