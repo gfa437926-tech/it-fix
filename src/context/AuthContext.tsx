@@ -83,7 +83,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         let isFirstController = false;
         if (!controllerSnap.exists()) {
-          isFirstController = true;
           const controllerData = {
             primaryUid: currentUser.uid,
             primaryEmail: currentUser.email || '',
@@ -91,6 +90,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
           try {
             await setDoc(controllerRef, controllerData);
+            isFirstController = true;
             setPrimaryControllerUid(currentUser.uid);
             setPrimaryControllerEmail(currentUser.email || '');
           } catch (e) {
