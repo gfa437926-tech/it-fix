@@ -10,6 +10,7 @@ on:
       - "package.json"
       - "firebase-applet-config.json"
       - "capacitor.config.ts"
+      - "capacitor.config.json"
       - "vite.config.ts"
       - "tsconfig*.json"
       - ".github/workflows/android-apk.yml"
