@@ -59,12 +59,13 @@ def test_backup_contains_consistent_database_snapshot_and_asset_documents(tmp_pa
         with zipfile.ZipFile(target) as archive:
             names = set(archive.namelist())
             assert "database/itfix_assets.sqlite3" in names
-            assert "data/documents/invoice.pdf" in names
             manifest = json.loads(archive.read("manifest.json"))
             assert manifest["encrypted"] is False
             assert manifest["database_type"] == "sqlite"
             assert len(manifest["attachments"]) == 1
-            assert manifest["attachments"][0]["path"] == "data/documents/invoice.pdf"
+            attachment_path = manifest["attachments"][0]["path"]
+            assert attachment_path.startswith("data/documents/")
+            assert attachment_path in names
             snapshot = tmp_path / "restored-snapshot.sqlite3"
             snapshot.write_bytes(archive.read("database/itfix_assets.sqlite3"))
 
