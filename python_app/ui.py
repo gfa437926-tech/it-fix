@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from datetime import datetime
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Any
 
@@ -453,6 +454,9 @@ class AssetInventoryApp:
     def refresh_all(self) -> None:
         self.refresh_dashboard()
         self.refresh_assets()
+        self.refresh_custody()
+        self.refresh_maintenance()
+        self.refresh_spare_parts()
         self.refresh_offices()
         self.refresh_movements()
 
@@ -514,6 +518,339 @@ class AssetInventoryApp:
                 movement.to_office_name or "—",
                 movement.notes or "",
             ))
+
+    def refresh_custody(self) -> None:
+        if not hasattr(self, "custody_tree"):
+            return
+        with SessionLocal() as session:
+            cards = list_custody_cards(session)
+        self.custody_tree.delete(*self.custody_tree.get_children())
+        status_labels = {"active": "فعالة", "returned": "معادة", "rejected": "مرفوضة"}
+        approval_labels = {"pending": "بانتظار الاعتماد", "approved": "معتمدة", "rejected": "مرفوضة"}
+        for card in cards:
+            self.custody_tree.insert("", "end", iid=card.id, values=(
+                card.id, card.card_number, card.responsible_name, card.office_name,
+                len(card.items), status_labels.get(card.status, card.status),
+                approval_labels.get(card.approval_status, card.approval_status),
+            ))
+
+    def refresh_maintenance(self) -> None:
+        if not hasattr(self, "maintenance_tree"):
+            return
+        with SessionLocal() as session:
+            tickets = list_maintenance_tickets(session)
+        self.maintenance_tree.delete(*self.maintenance_tree.get_children())
+        self._maintenance_ticket_ids: dict[str, str] = {}
+        options: list[str] = []
+        priority_labels = {"low": "منخفضة", "normal": "عادية", "high": "عالية", "urgent": "عاجلة"}
+        status_labels = {"open": "مفتوح", "inProgress": "قيد التنفيذ", "completed": "مكتمل", "cancelled": "ملغى"}
+        for ticket in tickets:
+            display = f"{ticket.id[:8]} — {ticket.title} — {ticket.asset_label}"
+            self._maintenance_ticket_ids[display] = ticket.id
+            options.append(display)
+            self.maintenance_tree.insert("", "end", iid=ticket.id, values=(
+                ticket.id, ticket.asset_label, ticket.title,
+                priority_labels.get(ticket.priority, ticket.priority),
+                status_labels.get(ticket.status, ticket.status),
+                ticket.technician or "—", f"{ticket.parts_cost:.2f}",
+                _display_date(ticket.reported_at),
+            ))
+        if hasattr(self, "maintenance_ticket_combo"):
+            current = self.maintenance_ticket_choice.get()
+            self.maintenance_ticket_combo.configure(values=options)
+            if current not in options:
+                self.maintenance_ticket_choice.set(options[0] if options else "")
+
+    def refresh_spare_parts(self) -> None:
+        if not hasattr(self, "spare_parts_tree"):
+            return
+        with SessionLocal() as session:
+            parts = list_spare_parts(session)
+        self.spare_parts_tree.delete(*self.spare_parts_tree.get_children())
+        for part in parts:
+            low = part.quantity <= part.minimum_quantity
+            self.spare_parts_tree.insert("", "end", iid=part.id, values=(
+                part.id, part.sku, part.name, f"{part.quantity:g}",
+                f"{part.minimum_quantity:g}", f"{part.unit_cost:.2f}",
+                part.supplier or "—", "يحتاج تزويد" if low else "متوفر",
+            ), tags=("low",) if low else ())
+        self.spare_parts_tree.tag_configure("low", background="#fff0e8")
+
+    def _selected_custody(self) -> CustodyCard | None:
+        selected = self.custody_tree.selection()
+        if not selected:
+            messagebox.showinfo("تحديد بطاقة", "حدد بطاقة عهدة أولاً.", parent=self.root)
+            return None
+        with SessionLocal() as session:
+            return session.get(CustodyCard, selected[0])
+
+    def _selected_maintenance(self) -> MaintenanceRecord | None:
+        selected = self.maintenance_tree.selection()
+        if not selected:
+            messagebox.showinfo("تحديد طلب", "حدد طلب صيانة أولاً.", parent=self.root)
+            return None
+        with SessionLocal() as session:
+            return session.get(MaintenanceRecord, selected[0])
+
+    def _selected_spare_part(self) -> SparePart | None:
+        selected = self.spare_parts_tree.selection()
+        if not selected:
+            messagebox.showinfo("تحديد قطعة", "حدد قطعة غيار من الجدول أولاً.", parent=self.root)
+            return None
+        with SessionLocal() as session:
+            return session.get(SparePart, selected[0])
+
+    def add_custody_card(self) -> None:
+        with SessionLocal() as session:
+            offices = list_offices(session, active_only=True)
+            available_assets = [
+                asset for asset in list_assets(session)
+                if asset.status in {"available", "returned"}
+            ]
+        card_number = simpledialog.askstring(
+            "بطاقة عهدة", "رقم البطاقة:", initialvalue=f"CR-{datetime.now():%y%m%d%H%M}", parent=self.root
+        )
+        if not card_number:
+            return
+        responsible = simpledialog.askstring("بطاقة عهدة", "اسم الموظف المستلم:", parent=self.root)
+        if not responsible:
+            return
+        office_default = offices[0].name if offices else "المستودع الرئيسي"
+        office_name = simpledialog.askstring(
+            "بطاقة عهدة",
+            "المكتب / الجهة المستلمة:\n" + "\n".join(item.name for item in offices),
+            initialvalue=office_default,
+            parent=self.root,
+        )
+        if not office_name:
+            return
+        asset_hint = "\n".join(
+            f"{asset.serial_number or 'بدون رقم'} — {asset.brand} {asset.model}"
+            for asset in available_assets[:25]
+        )
+        serial = simpledialog.askstring(
+            "ربط أصل ببطاقة العهدة",
+            "أدخل الرقم التسلسلي لأصل متاح، أو اتركه فارغاً لإضافة بند يدوي.\n" + asset_hint,
+            parent=self.root,
+        )
+        linked_asset = None
+        if serial and serial.strip():
+            with SessionLocal() as session:
+                linked_asset = session.scalar(select(Asset).where(
+                    Asset.serial_key == serial.strip().upper()
+                ).limit(1))
+            if linked_asset is None or linked_asset.status not in {"available", "returned"}:
+                messagebox.showerror("أصل غير متاح", "لم يتم العثور على أصل متاح بهذا الرقم التسلسلي.", parent=self.root)
+                return
+            item_name = f"{linked_asset.brand} {linked_asset.model}".strip()
+        else:
+            item_name = simpledialog.askstring("بند العهدة", "اسم المادة أو الجهاز:", parent=self.root) or ""
+        try:
+            with SessionLocal() as session:
+                create_custody_card(
+                    session,
+                    card_number=card_number,
+                    responsible_name=responsible,
+                    office_name=office_name,
+                    items=[CustodyItemInput(
+                        item_name=item_name,
+                        quantity=1,
+                        asset_id=linked_asset.id if linked_asset else None,
+                    )],
+                    actor_name=self.actor_name,
+                )
+            self.refresh_all()
+            messagebox.showinfo("تم إنشاء البطاقة", "أُنشئت البطاقة بانتظار الاعتماد. لم تتغير حالة الأصل قبل الاعتماد.", parent=self.root)
+        except Exception as exc:
+            messagebox.showerror("تعذر إنشاء البطاقة", str(exc), parent=self.root)
+
+    def approve_selected_custody(self) -> None:
+        card = self._selected_custody()
+        if card is None:
+            return
+        try:
+            with SessionLocal() as session:
+                approve_custody_card(session, card.id, self.actor_name)
+            self.refresh_all()
+            messagebox.showinfo("تم الاعتماد", "تم اعتماد بطاقة العهدة وتحديث حالة الأصول المرتبطة.", parent=self.root)
+        except Exception as exc:
+            messagebox.showerror("تعذر الاعتماد", str(exc), parent=self.root)
+
+    def reject_selected_custody(self) -> None:
+        card = self._selected_custody()
+        if card is None:
+            return
+        reason = simpledialog.askstring("رفض بطاقة عهدة", "سبب الرفض:", parent=self.root)
+        if not reason:
+            return
+        try:
+            with SessionLocal() as session:
+                reject_custody_card(session, card.id, self.actor_name, reason)
+            self.refresh_all()
+            messagebox.showinfo("تم الرفض", "تم رفض البطاقة وحفظ سبب الرفض.", parent=self.root)
+        except Exception as exc:
+            messagebox.showerror("تعذر الرفض", str(exc), parent=self.root)
+
+    def return_selected_custody(self) -> None:
+        card = self._selected_custody()
+        if card is None:
+            return
+        notes = simpledialog.askstring("إرجاع العهدة", "ملاحظات الإرجاع (اختياري):", parent=self.root) or ""
+        try:
+            with SessionLocal() as session:
+                return_custody_card(session, card.id, self.actor_name, notes)
+            self.refresh_all()
+            messagebox.showinfo("تم الإرجاع", "تم إغلاق بطاقة العهدة وتحديث حالة الأجهزة المرتبطة.", parent=self.root)
+        except Exception as exc:
+            messagebox.showerror("تعذر الإرجاع", str(exc), parent=self.root)
+
+    def add_maintenance_ticket(self) -> None:
+        with SessionLocal() as session:
+            assets = [
+                asset for asset in list_assets(session)
+                if asset.status not in {"retired", "maintenance"}
+            ]
+        if not assets:
+            messagebox.showinfo("الصيانة", "لا توجد أصول متاحة لفتح طلب صيانة.", parent=self.root)
+            return
+        serial = simpledialog.askstring(
+            "فتح طلب صيانة",
+            "أدخل الرقم التسلسلي للأصل:\n" + "\n".join(
+                f"{asset.serial_number or 'بدون رقم'} — {asset.brand} {asset.model}"
+                for asset in assets[:30]
+            ),
+            parent=self.root,
+        )
+        if not serial:
+            return
+        with SessionLocal() as session:
+            asset = session.scalar(select(Asset).where(
+                Asset.serial_key == serial.strip().upper()
+            ).limit(1))
+        if asset is None:
+            messagebox.showerror("الأصل غير موجود", "لم أجد أصلاً بهذا الرقم التسلسلي.", parent=self.root)
+            return
+        title = simpledialog.askstring("فتح طلب صيانة", "عنوان العطل:", parent=self.root)
+        if not title:
+            return
+        description = simpledialog.askstring("وصف العطل", "اشرح العطل أو المشكلة:", parent=self.root)
+        if not description:
+            return
+        priority_ar = simpledialog.askstring(
+            "أولوية الصيانة", "الأولوية: منخفضة / عادية / عالية / عاجلة",
+            initialvalue="عادية", parent=self.root,
+        ) or "عادية"
+        priority = {"منخفضة": "low", "عادية": "normal", "عالية": "high", "عاجلة": "urgent"}.get(priority_ar, "normal")
+        technician = simpledialog.askstring("الفني", "اسم الفني المسؤول (اختياري):", parent=self.root) or ""
+        try:
+            with SessionLocal() as session:
+                open_maintenance_ticket(
+                    session, asset.id, title, description, priority, technician, self.actor_name
+                )
+            self.refresh_all()
+            messagebox.showinfo("تم فتح الطلب", "تم تسجيل طلب الصيانة وتحويل حالة الأصل إلى قيد الصيانة.", parent=self.root)
+        except Exception as exc:
+            messagebox.showerror("تعذر فتح الطلب", str(exc), parent=self.root)
+
+    def start_selected_maintenance(self) -> None:
+        ticket = self._selected_maintenance()
+        if ticket is None:
+            return
+        try:
+            with SessionLocal() as session:
+                update_maintenance_ticket(
+                    session, ticket.id, "inProgress", self.actor_name
+                )
+            self.refresh_all()
+        except Exception as exc:
+            messagebox.showerror("تعذر تحديث الطلب", str(exc), parent=self.root)
+
+    def complete_selected_maintenance(self) -> None:
+        ticket = self._selected_maintenance()
+        if ticket is None:
+            return
+        resolution = simpledialog.askstring("إكمال الصيانة", "الإصلاح الذي تم تنفيذه:", parent=self.root)
+        if not resolution:
+            return
+        cost_text = simpledialog.askstring("تكلفة الصيانة", "تكلفة أجور الصيانة (رقم):", initialvalue="0", parent=self.root) or "0"
+        try:
+            cost = float(cost_text.replace(",", "."))
+            with SessionLocal() as session:
+                update_maintenance_ticket(
+                    session, ticket.id, "completed", self.actor_name,
+                    resolution=resolution, cost=cost,
+                )
+            self.refresh_all()
+            messagebox.showinfo("تم إكمال الصيانة", "تم إغلاق الطلب وإرجاع الأصل إلى حالته السابقة.", parent=self.root)
+        except Exception as exc:
+            messagebox.showerror("تعذر إكمال الصيانة", str(exc), parent=self.root)
+
+    def cancel_selected_maintenance(self) -> None:
+        ticket = self._selected_maintenance()
+        if ticket is None:
+            return
+        if not messagebox.askyesno("إلغاء طلب الصيانة", "هل تريد إلغاء الطلب وإرجاع الأصل إلى حالته السابقة؟", parent=self.root):
+            return
+        try:
+            with SessionLocal() as session:
+                update_maintenance_ticket(session, ticket.id, "cancelled", self.actor_name)
+            self.refresh_all()
+        except Exception as exc:
+            messagebox.showerror("تعذر إلغاء الطلب", str(exc), parent=self.root)
+
+    def add_spare_part(self) -> None:
+        name = simpledialog.askstring("قطعة غيار", "اسم القطعة:", parent=self.root)
+        if not name:
+            return
+        sku = simpledialog.askstring("قطعة غيار", "رمز القطعة SKU:", parent=self.root)
+        if not sku:
+            return
+        values: list[float] = []
+        for prompt, initial in [
+            ("الكمية الحالية:", "0"),
+            ("الحد الأدنى للمخزون:", "0"),
+            ("سعر الوحدة:", "0"),
+        ]:
+            raw = simpledialog.askstring("بيانات المخزون", prompt, initialvalue=initial, parent=self.root)
+            if raw is None:
+                return
+            try:
+                values.append(float(raw.replace(",", ".")))
+            except ValueError:
+                messagebox.showerror("قيمة غير صحيحة", "أدخل قيمة رقمية صحيحة.", parent=self.root)
+                return
+        supplier = simpledialog.askstring("المورد", "اسم المورد (اختياري):", parent=self.root) or ""
+        try:
+            with SessionLocal() as session:
+                create_spare_part(session, name, sku, values[0], values[1], values[2], supplier)
+            self.refresh_spare_parts()
+            messagebox.showinfo("تمت الإضافة", "تم تسجيل قطعة الغيار في المخزون.", parent=self.root)
+        except Exception as exc:
+            messagebox.showerror("تعذر حفظ القطعة", str(exc), parent=self.root)
+
+    def consume_selected_spare_part(self) -> None:
+        part = self._selected_spare_part()
+        if part is None:
+            return
+        ticket_label = self.maintenance_ticket_choice.get()
+        ticket_id = getattr(self, "_maintenance_ticket_ids", {}).get(ticket_label)
+        if not ticket_id:
+            messagebox.showinfo("اختر طلب صيانة", "اختر طلب الصيانة من القائمة قبل صرف القطعة.", parent=self.root)
+            return
+        quantity_text = simpledialog.askstring("صرف قطعة غيار", "الكمية المراد صرفها:", initialvalue="1", parent=self.root)
+        if not quantity_text:
+            return
+        try:
+            quantity = float(quantity_text.replace(",", "."))
+            with SessionLocal() as session:
+                consume_spare_part(
+                    session, part.id, ticket_id, quantity,
+                    actor_name=self.actor_name,
+                )
+            self.refresh_all()
+            messagebox.showinfo("تم صرف القطعة", "تم خصم الكمية وتحديث تكلفة قطع الغيار في طلب الصيانة.", parent=self.root)
+        except Exception as exc:
+            messagebox.showerror("تعذر صرف القطعة", str(exc), parent=self.root)
 
     def _selected_asset(self) -> Asset | None:
         selected = self.assets_tree.selection()
