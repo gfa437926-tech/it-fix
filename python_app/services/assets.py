@@ -193,7 +193,9 @@ def update_asset(session: Session, asset_id: str, data: AssetInput, actor_name: 
             asset.storage = cleaned.storage or None
             asset.office_id = office.id if office else None
             asset.office_name = office.name if office else (cleaned.office_name or "المستودع الرئيسي")
-            if old_office and office and old_office.id != office.id:
+            old_office_id = old_office.id if old_office else None
+            new_office_id = office.id if office else None
+            if old_office_id != new_office_id:
                 asset.transferred_at = utc_now()
                 _record_movement(
                     session, asset, "transferred", actor_name, "تغيير موقع الأصل من بطاقة الأصل.",
