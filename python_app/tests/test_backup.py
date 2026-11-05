@@ -117,3 +117,133 @@ def test_backup_rejects_symlinked_attachment(tmp_path: Path) -> None:
     finally:
         Base.metadata.drop_all(engine)
         engine.dispose()
+
+
+def test_restore_replaces_database_and_documents_after_safety_backup(tmp_path: Path) -> None:
+    from python_app.services.backup import restore_sqlite_backup_archive
+
+    database_path = tmp_path / "live-data" / "itfix_assets.db"
+    database_path.parent.mkdir(parents=True)
+    engine = create_engine(f"sqlite:///{database_path}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    session = factory()
+    try:
+        original_asset = create_asset(
+            session, AssetInput("laptop", "HP", "ProBook", "RESTORE-ORIGINAL")
+        )
+        data_dir = tmp_path / "live-data"
+        original_file = tmp_path / "original.pdf"
+        original_file.write_bytes(b"%PDF-1.7\\noriginal backup\\n%%EOF")
+        original_document = attach_asset_document(
+            session,
+            asset_id=original_asset.id,
+            source_path=original_file,
+            uploaded_by="مدير",
+            document_type="invoice",
+            storage_root=data_dir,
+        )
+        archive_path = tmp_path / "known-good-backup.zip"
+        create_backup_archive(
+            archive_path,
+            database_engine=engine,
+            data_directory=data_dir,
+        )
+
+        changed_asset = create_asset(
+            session, AssetInput("desktop", "Dell", "OptiPlex", "RESTORE-NEW")
+        )
+        changed_file = tmp_path / "new.pdf"
+        changed_file.write_bytes(b"%PDF-1.7\\nnew live attachment\\n%%EOF")
+        attach_asset_document(
+            session,
+            asset_id=changed_asset.id,
+            source_path=changed_file,
+            uploaded_by="مدير",
+            document_type="other",
+            storage_root=data_dir,
+        )
+        session.close()
+
+        safety_path = tmp_path / "before-restore.zip"
+        result = restore_sqlite_backup_archive(
+            archive_path,
+            database_engine=engine,
+            data_directory=data_dir,
+            confirmed=True,
+            safety_backup_path=safety_path,
+        )
+
+        assert result.database_path == database_path.resolve()
+        assert result.restored_attachment_count == 1
+        assert result.safety_backup_path == safety_path.resolve()
+        assert safety_path.is_file()
+        with sqlite3.connect(database_path) as restored:
+            assets = restored.execute(
+                "select serial_number from assets order by serial_number"
+            ).fetchall()
+            documents = restored.execute(
+                "select id, file_name from asset_documents"
+            ).fetchall()
+        assert assets == [("RESTORE-ORIGINAL",)]
+        assert documents == [(original_document.id, "original.pdf")]
+        restored_files = list((data_dir / "documents").iterdir())
+        assert len(restored_files) == 1
+        assert restored_files[0].read_bytes() == original_file.read_bytes()
+
+        safety_result = create_backup_archive(
+            tmp_path / "safety-repacked.zip",
+            database_engine=engine,
+            data_directory=data_dir,
+        )
+        assert safety_result.attachment_count == 1
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_restore_requires_explicit_confirmation(tmp_path: Path) -> None:
+    from python_app.services.backup import restore_sqlite_backup_archive
+
+    engine = create_engine("sqlite://")
+    try:
+        with pytest.raises(ValueError, match="تأكيداً صريحاً"):
+            restore_sqlite_backup_archive(
+                tmp_path / "missing.zip",
+                database_engine=engine,
+                data_directory=tmp_path / "data",
+            )
+    finally:
+        engine.dispose()
+
+
+def test_backup_verification_detects_manifest_hash_tampering(tmp_path: Path) -> None:
+    from python_app.services.backup import verify_backup_archive
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    session = factory()
+    try:
+        target = tmp_path / "original.zip"
+        create_backup_archive(
+            target,
+            database_engine=engine,
+            data_directory=tmp_path / "data",
+        )
+
+        tampered = tmp_path / "tampered.zip"
+        with zipfile.ZipFile(target, "r") as source, zipfile.ZipFile(tampered, "w") as destination:
+            for item in source.infolist():
+                content = source.read(item.filename)
+                if item.filename == "manifest.json":
+                    manifest = json.loads(content.decode("utf-8"))
+                    manifest["database_sha256"] = "0" * 64
+                    content = json.dumps(manifest).encode("utf-8")
+                destination.writestr(item.filename, content)
+
+        with pytest.raises(ValueError, match="بصمة قاعدة البيانات"):
+            verify_backup_archive(tampered)
+    finally:
+        session.close()
+        engine.dispose()
