@@ -212,7 +212,6 @@ def create_user(
     password: str,
     role: str = "it_manager",
 ) -> AppUser:
-    actor = _require_active_admin(session, actor)
     username = validate_username(username)
     display_name = display_name.strip()
     validate_password(password)
@@ -223,6 +222,7 @@ def create_user(
 
     try:
         with session.begin():
+            actor = _require_active_admin(session, actor)
             user = AppUser(
                 username=username,
                 display_name=display_name,
@@ -253,9 +253,8 @@ def set_user_active(
     target_user_id: str,
     is_active: bool,
 ) -> AppUser:
-    actor = _require_active_admin(session, actor)
-
     with session.begin():
+        actor = _require_active_admin(session, actor)
         user = session.get(AppUser, target_user_id)
         if user is None:
             raise ValueError("الحساب المطلوب غير موجود.")
