@@ -100,16 +100,16 @@ export const GoogleSheetsView: React.FC<GoogleSheetsViewProps> = ({
       const token = await ensureToken();
       const sheetInfo = await createSpreadsheet(token);
 
-      // Save to Firestore settings
+      // Do not persist a successful-sync timestamp until the Sheets API confirms
+      // that the initial data write completed.
+      await syncDataToGoogleSheet(token, sheetInfo.spreadsheetId, assets, custodyCards);
+
       const now = new Date().toISOString();
       await setDoc(doc(db, 'system_settings', 'google_sheets'), {
         ...sheetInfo,
         lastSyncedAt: now,
         syncedBy: profile?.displayName || user?.email,
       });
-
-      // Immediately sync current data
-      await syncDataToGoogleSheet(token, sheetInfo.spreadsheetId, assets, custodyCards);
 
       setConnectedSheet(sheetInfo);
       setLastSyncedAt(now);
