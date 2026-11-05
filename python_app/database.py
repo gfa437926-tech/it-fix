@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from sqlalchemy import Engine, create_engine, inspect, text
+from sqlalchemy import Engine, create_engine, event, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -35,6 +35,20 @@ def build_engine(database_url: str | None = None) -> Engine:
 
 
 engine = build_engine()
+
+
+@event.listens_for(engine, "connect")
+def _enable_sqlite_integrity(dbapi_connection: object, _connection_record: object) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    cursor = dbapi_connection.cursor()  # type: ignore[attr-defined]
+    try:
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA busy_timeout=30000")
+    finally:
+        cursor.close()
+
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, class_=Session)
 
 
@@ -47,7 +61,21 @@ def initialize_database(target_engine: Engine = engine, *, allow_schema_creation
         return
 
     inspector = inspect(target_engine)
-    required_tables = {"offices", "assets", "asset_movements", "import_batches"}
+    required_tables = {
+        "offices",
+        "assets",
+        "asset_movements",
+        "import_batches",
+        "audit_logs",
+        "app_users",
+        "custody_cards",
+        "custody_items",
+        "maintenance_records",
+        "spare_parts",
+        "maintenance_part_usage",
+        "purchase_records",
+        "asset_documents",
+    }
     existing_tables = set(inspector.get_table_names())
     missing = sorted(required_tables - existing_tables)
     if missing:
