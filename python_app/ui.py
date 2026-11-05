@@ -18,6 +18,7 @@ from .services.auth import (
     create_user,
     list_users,
     set_user_active,
+    set_user_role,
     require_active_admin,
     require_active_user,
     reset_user_password,
@@ -670,6 +671,7 @@ class AssetInventoryApp:
         ttk.Button(toolbar, text="إضافة مستخدم", command=self.add_local_user).pack(side="left", padx=4)
         ttk.Button(toolbar, text="تفعيل / إيقاف الحساب", command=self.toggle_selected_user).pack(side="left", padx=4)
         ttk.Button(toolbar, text="إعادة تعيين كلمة المرور", command=self.reset_selected_user_password).pack(side="left", padx=4)
+        ttk.Button(toolbar, text="تغيير الصلاحية", command=self.change_selected_user_role).pack(side="left", padx=4)
         ttk.Button(toolbar, text="تحديث القائمة", command=self.refresh_users).pack(side="left", padx=4)
         ttk.Label(
             self.users_tab,
@@ -1405,6 +1407,55 @@ class AssetInventoryApp:
                 str(exc),
                 parent=self.root,
             )
+
+    def change_selected_user_role(self) -> None:
+        if not self._ensure_active_session(admin_only=True):
+            return
+        selected = self.users_tree.selection() if hasattr(self, "users_tree") else ()
+        if not selected:
+            messagebox.showinfo("تحديد مستخدم", "حدد حساباً من الجدول أولاً.", parent=self.root)
+            return
+        target_id = selected[0]
+        if target_id == self.user.id:
+            messagebox.showwarning(
+                "الحساب الحالي",
+                "لا تغيّر صلاحية حسابك من داخل جلسته الحالية.",
+                parent=self.root,
+            )
+            return
+
+        with SessionLocal() as session:
+            target = session.get(AppUser, target_id)
+        if target is None:
+            messagebox.showerror("حساب غير موجود", "لم يعد الحساب المحدد موجوداً.", parent=self.root)
+            self.refresh_users()
+            return
+
+        role_choice = simpledialog.askstring(
+            "تغيير صلاحية المستخدم",
+            "اكتب الدور المطلوب: admin لمدير النظام أو it_manager لمدير الأصول:",
+            initialvalue=target.role,
+            parent=self.root,
+        )
+        if role_choice is None:
+            return
+        new_role = role_choice.strip().lower()
+        try:
+            with SessionLocal() as session:
+                updated = set_user_role(
+                    session,
+                    self.user,
+                    target_id,
+                    new_role,
+                )
+            self.refresh_users()
+            messagebox.showinfo(
+                "تم تغيير الصلاحية",
+                f"تم تحديث صلاحية الحساب {updated.username}.",
+                parent=self.root,
+            )
+        except Exception as exc:
+            messagebox.showerror("تعذر تغيير الصلاحية", str(exc), parent=self.root)
 
     def change_password(self) -> None:
         if not self._ensure_active_session():
