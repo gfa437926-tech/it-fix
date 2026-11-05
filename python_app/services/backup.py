@@ -110,6 +110,13 @@ def create_backup_archive(
     output = Path(destination).expanduser().resolve()
     if output.suffix.lower() != ".zip":
         raise ValueError("يجب أن يكون اسم النسخة الاحتياطية بامتداد .zip.")
+    if output.exists():
+        raise FileExistsError("ملف النسخة الاحتياطية موجود مسبقاً؛ اختر اسماً آخر حتى لا تُستبدل نسخة سابقة.")
+
+    data_root = Path(data_directory).expanduser().resolve()
+    documents_root = (data_root / "documents").resolve()
+    if output == documents_root or documents_root in output.parents:
+        raise ValueError("احفظ النسخة الاحتياطية خارج مجلد مرفقات الأصول.")
     output.parent.mkdir(parents=True, exist_ok=True)
 
     database_type = database_engine.dialect.name
@@ -130,8 +137,6 @@ def create_backup_archive(
         if database_bytes <= 0:
             raise RuntimeError("ملف قاعدة البيانات الاحتياطي فارغ.")
 
-        data_root = Path(data_directory).resolve()
-        documents_root = data_root / "documents"
         attachment_files: list[Path] = []
         if documents_root.exists():
             for candidate in documents_root.rglob("*"):
@@ -334,7 +339,10 @@ def restore_sqlite_backup_archive(
         raise FileNotFoundError("ملف قاعدة البيانات الحالية غير موجود؛ لا يمكن إنشاء نسخة أمان قبل الاستعادة.")
 
     data_root = Path(data_directory).expanduser().resolve()
-    documents_directory = data_root / "documents"
+    documents_directory = (data_root / "documents").resolve()
+    archive_source = Path(archive_path).expanduser().resolve()
+    if archive_source == documents_directory or documents_directory in archive_source.parents:
+        raise ValueError("لا تستعد من ملف موجود داخل مجلد المرفقات؛ سيتم استبدال هذا المجلد أثناء الاستعادة.")
     created_at = datetime.now(timezone.utc)
     if safety_backup_path is None:
         safety_path = database_path.parent / (
@@ -342,8 +350,10 @@ def restore_sqlite_backup_archive(
         )
     else:
         safety_path = Path(safety_backup_path).expanduser().resolve()
-    if safety_path == Path(archive_path).expanduser().resolve():
+    if safety_path == archive_source:
         raise ValueError("لا يجوز الكتابة فوق ملف النسخة التي ستتم استعادتها.")
+    if safety_path == documents_directory or documents_directory in safety_path.parents:
+        raise ValueError("احفظ نسخة الأمان خارج مجلد المرفقات الذي ستتم استعادته.")
     if safety_path.exists():
         raise FileExistsError("ملف نسخة الأمان موجود مسبقاً؛ اختر اسماً آخر حتى لا تُستبدل نسخة سابقة.")
 
