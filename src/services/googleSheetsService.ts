@@ -257,8 +257,8 @@ export async function syncDataToGoogleSheet(
   // The app exports a full snapshot. Remove leftover rows from a previous,
   // larger export so deleted assets/custody items do not remain in the sheet.
   const clearRanges = [
-    `'الأجهزة والجرد'!A${assetRows.length + 2}:K10000`,
-    `'بطاقات العهدة'!A${custodyRows.length + 2}:T10000`,
+    `'الأجهزة والجرد'!A${assetRows.length + 2}:K`,
+    `'بطاقات العهدة'!A${custodyRows.length + 2}:T`,
   ];
   const clearResponse = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchClear`,
