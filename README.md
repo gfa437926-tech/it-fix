@@ -127,3 +127,10 @@ GitHub Actions workflows are provided for Windows installer and Android debug AP
 ### Google Sheets capacity safety
 
 Before exporting a full inventory snapshot, the integration reads the grid dimensions of every worksheet and expands only the two required export tabs when more rows or columns are needed. Existing worksheet dimensions are never reduced. The preflight includes all tabs in the spreadsheet and refuses an expansion that would exceed Google Sheets' 10-million-cell spreadsheet limit, reporting the required cell count before any snapshot rows are written.
+
+
+## Standalone Python edition
+
+A separate Arabic-first Python desktop edition is being developed in `python_app/`. It does not change or replace the existing React/Firebase application. The current Python build includes the asset register, office locations, movement and retirement records, plus validated Excel import/export.
+
+See [python_app/README.md](python_app/README.md) for Windows setup, local SQLite mode, native PostgreSQL setup without Docker, and current limitations. The Python version is still under development; user authentication, custody cards, maintenance, spare parts, purchase records and attachments have not yet been ported.
