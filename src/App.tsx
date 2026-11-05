@@ -328,7 +328,7 @@ function MainApp() {
         lowStockCount={lowStock}
       />
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
         {/* Sidebar */}
         <Sidebar
           currentTab={currentTab}
@@ -342,7 +342,7 @@ function MainApp() {
         />
 
         {/* Content Area */}
-        <main className="flex-1 p-6 md:p-8 overflow-y-auto max-h-[calc(100vh-4rem)]">
+        <main className="flex-1 min-h-0 p-3 sm:p-4 md:p-8 overflow-y-auto max-h-[calc(100vh-10rem)] md:max-h-[calc(100vh-4rem)]">
           {currentTab === 'dashboard' && (
             <DashboardView
               assets={assets}
