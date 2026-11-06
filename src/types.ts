@@ -324,6 +324,34 @@ export interface Warehouse {
   notes?: string;
 }
 
+export type AccessProfile =
+  | 'custom'
+  | 'asset_operator'
+  | 'warehouse_manager'
+  | 'custody_officer'
+  | 'maintenance_technician'
+  | 'auditor'
+  | 'viewer';
+
+export const ACCESS_PROFILE_LABELS: Record<AccessProfile, string> = {
+  custom: 'تخصيص يدوي',
+  asset_operator: 'مسؤول الأصول',
+  warehouse_manager: 'مسؤول المستودع',
+  custody_officer: 'مسؤول العهد',
+  maintenance_technician: 'فني الصيانة',
+  auditor: 'مدقق',
+  viewer: 'مشاهدة فقط',
+};
+
+export const ACCESS_PROFILE_PRESETS: Record<Exclude<AccessProfile, 'custom'>, UserPermission[]> = {
+  asset_operator: ['assets.read', 'assets.create', 'assets.update', 'reports.read'],
+  warehouse_manager: ['assets.read', 'warehouses.read', 'warehouses.manage', 'offices.read', 'spareparts.read', 'spareparts.manage', 'reports.read'],
+  custody_officer: ['assets.read', 'custody.read', 'custody.manage', 'reports.read'],
+  maintenance_technician: ['assets.read', 'maintenance.read', 'maintenance.manage', 'spareparts.read', 'spareparts.manage', 'reports.read'],
+  auditor: ['assets.read', 'offices.read', 'warehouses.read', 'custody.read', 'maintenance.read', 'spareparts.read', 'reports.read'],
+  viewer: ['assets.read', 'offices.read', 'warehouses.read', 'custody.read', 'maintenance.read', 'spareparts.read', 'reports.read'],
+};
+
 export interface UserProfile {
   uid: string;
   displayName: string;
@@ -332,6 +360,7 @@ export interface UserProfile {
   isActive: boolean;
   // When enabled, Firestore rules require explicit permissions and assigned scope.
   accessControlEnabled?: boolean;
+  accessProfile?: AccessProfile;
   permissions?: Partial<Record<UserPermission, boolean>>;
   officeIds?: string[];
   warehouseIds?: string[];
