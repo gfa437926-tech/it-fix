@@ -342,18 +342,19 @@ export async function transferCustodyRecord(
       const data = cardSnap.data() as CustodyRecord;
       if (data.status !== 'active') throw new Error('لا يمكن نقل بطاقة عهدة مغلقة');
       if (data.approvalStatus !== 'approved') throw new Error('لا يمكن نقل عهدة قبل اعتمادها');
+      if (!data.assetId) throw new Error('بطاقة العهدة غير مرتبطة بمعرّف أصل');
+
+      const assetRef = doc(db, 'assets', data.assetId);
+      const assetSnap = await tx.get(assetRef);
+      if (!assetSnap.exists()) throw new Error('الأصل المرتبط بالعهدة غير موجود');
+      if (assetSnap.data().status !== 'assigned') {
+        throw new Error('الأصل ليس في حالة عهدة نشطة؛ راجع سجل الأصل قبل نقل العهدة');
+      }
 
       const now = new Date().toISOString();
-
-      if (card.assetId) {
-        const assetRef = doc(db, 'assets', card.assetId);
-        const assetSnap = await tx.get(assetRef);
-        if (assetSnap.exists()) {
-          tx.update(assetRef, {
-            officeName: newOfficeName.trim(),
-          });
-        }
-      }
+      tx.update(assetRef, {
+        officeName: newOfficeName.trim(),
+      });
 
       tx.update(cardRef, {
         responsibleName: newEmployeeName.trim(),
