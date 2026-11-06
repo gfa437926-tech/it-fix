@@ -35,19 +35,18 @@ service firebase.storage {
     }
 
     function hasAssignedScope(officeId, warehouseId) {
-      return (
-        officeId is string &&
-        officeId.size() > 0 &&
-        profile().keys().hasAny(['officeIds']) &&
-        profile().officeIds is list &&
-        profile().officeIds.hasAny([officeId])
-      ) || (
-        warehouseId is string &&
-        warehouseId.size() > 0 &&
-        profile().keys().hasAny(['warehouseIds']) &&
-        profile().warehouseIds is list &&
-        profile().warehouseIds.hasAny([warehouseId])
-      );
+      let hasOffice = officeId is string && officeId.size() > 0;
+      let hasWarehouse = warehouseId is string && warehouseId.size() > 0;
+      let officeAllowed = !hasOffice ||
+        (profile().keys().hasAny(['officeIds']) &&
+          profile().officeIds is list &&
+          profile().officeIds.hasAny([officeId]));
+      let warehouseAllowed = !hasWarehouse ||
+        (profile().keys().hasAny(['warehouseIds']) &&
+          profile().warehouseIds is list &&
+          profile().warehouseIds.hasAny([warehouseId]));
+      // Enforce intersection when a resource is tagged with both scopes.
+      return (hasOffice || hasWarehouse) && officeAllowed && warehouseAllowed;
     }
 
     function linkedAssetExists(assetId) {
