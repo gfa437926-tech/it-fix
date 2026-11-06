@@ -297,7 +297,21 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
         } else {
           firstRowBySerial.set(serial, row.rowIndex);
         }
-        return { ...row, serialNumber: serial, error };
+        const original = row.existingAssetId
+          ? assets.find((asset) => asset.id === row.existingAssetId)
+          : undefined;
+        const changes: string[] = [];
+        if (original) {
+          if (original.officeName !== row.officeName && row.officeName) changes.push(`المكتب: ${original.officeName || 'المستودع'} ➔ ${row.officeName}`);
+          if (original.brand !== row.brand && row.brand) changes.push(`الشركة: ${original.brand} ➔ ${row.brand}`);
+          if (original.model !== row.model && row.model) changes.push(`الموديل: ${original.model} ➔ ${row.model}`);
+          if (original.category !== row.category) changes.push(`التصنيف: ${ASSET_CATEGORY_LABELS[original.category]} ➔ ${ASSET_CATEGORY_LABELS[row.category]}`);
+          if (original.status !== row.status) changes.push(`الحالة: ${ASSET_STATUS_LABELS[original.status].label} ➔ ${ASSET_STATUS_LABELS[row.status]?.label || row.status}`);
+          if (original.cpu !== row.cpu && row.cpu) changes.push(`المعالج: ${original.cpu || 'فارغ'} ➔ ${row.cpu}`);
+          if (original.ram !== row.ram && row.ram) changes.push(`الذاكرة: ${original.ram || 'فارغ'} ➔ ${row.ram}`);
+          if (original.storage !== row.storage && row.storage) changes.push(`التخزين: ${original.storage || 'فارغ'} ➔ ${row.storage}`);
+        }
+        return { ...row, serialNumber: serial, changes, error };
       });
     });
   };
