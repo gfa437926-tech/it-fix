@@ -203,3 +203,35 @@ def test_document_path_rejects_traversal_and_missing_files(tmp_path: Path) -> No
             SimpleNamespace(storage_path="documents/missing.pdf"),
             tmp_path / "data",
         )
+
+
+def test_invoice_attachment_can_be_linked_to_purchase_record_for_same_asset(
+    session: Session, tmp_path: Path
+) -> None:
+    asset = create_asset(session, AssetInput("laptop", "Lenovo", "ThinkPad", "DOC-INVOICE-LINK"))
+    purchase = PurchaseRecord(
+        asset_id=asset.id,
+        asset_label="Lenovo ThinkPad",
+        supplier="المورد التقني",
+        invoice_number="INV-LINK-2026",
+        purchase_date="2026-11-01",
+        total_cost=1250,
+    )
+    session.add(purchase)
+    session.commit()
+    source = write_pdf(tmp_path / "linked-invoice.pdf")
+
+    document = attach_asset_document(
+        session,
+        asset_id=asset.id,
+        source_path=source,
+        uploaded_by="مدير الجرد",
+        document_type="invoice",
+        purchase_record_id=purchase.id,
+        storage_root=tmp_path / "data",
+    )
+
+    assert document.document_type == "invoice"
+    assert document.purchase_record_id == purchase.id
+    assert list_asset_documents(session, asset.id) == [document]
+    assert resolve_asset_document_path(document, tmp_path / "data").read_bytes() == source.read_bytes()
