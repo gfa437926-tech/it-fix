@@ -116,7 +116,6 @@ function MainApp() {
     unsubs.push(
       watchOffices(async (data) => {
         setOffices(data);
-    unsubs.push(watchWarehouses((data) => setWarehouses(data), undefined, profile));
         // Seed default offices if completely empty
         if (import.meta.env.DEV && data.length === 0) {
           try {
@@ -149,6 +148,7 @@ function MainApp() {
         }
       }, undefined, profile)
     );
+    unsubs.push(watchWarehouses((data) => setWarehouses(data), undefined, profile));
     unsubs.push(
       watchCustodyCards(async (data) => {
         setCustodyCards(data);
