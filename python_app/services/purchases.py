@@ -25,7 +25,7 @@ def create_purchase_record(
     supplier = supplier.strip()
     invoice_number = invoice_number.strip()
     purchase_date = purchase_date.strip()
-    warranty_until = warranty_until.strip()
+    warranty_until = (warranty_until or '').strip()
     notes = notes.strip()
 
     if not asset_id.strip():
