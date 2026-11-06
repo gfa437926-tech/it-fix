@@ -7,9 +7,10 @@ import {
   runTransaction,
   query,
   orderBy,
+  where,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { CustodyRecord, CustodyItem } from '../types';
+import { CustodyRecord, CustodyItem, UserProfile } from '../types';
 
 export async function saveOfficialCustodyCard(
   card: Partial<CustodyRecord> & {
@@ -48,6 +49,8 @@ export async function saveOfficialCustodyCard(
     directorate: card.directorate?.trim() || '',
     department: card.department?.trim() || '',
     officeName: card.officeName.trim(),
+    officeId: card.officeId || '',
+    warehouseId: card.warehouseId || '',
     officeRoom: card.officeRoom?.trim() || '',
     assetLabel,
     assignedAt: card.assignedAt || now,
@@ -98,25 +101,35 @@ export async function deleteCustodyRecord(cardId: string): Promise<void> {
 
 export function watchCustodyCards(
   onData: (cards: CustodyRecord[]) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  scope?: UserProfile | null
 ) {
-  const cardsRef = collection(db, 'custody_cards');
-  const q = query(cardsRef, orderBy('assignedAt', 'desc'));
-
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const cards = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      })) as CustodyRecord[];
-      onData(cards);
-    },
-    (error) => {
-      handleFirestoreError(error, OperationType.GET, 'custody_cards');
-      onError?.(error as Error);
-    }
-  );
+  const ref = collection(db, 'custody_cards');
+  if (scope?.accessControlEnabled === true) {
+    const groups: { field: 'officeId' | 'warehouseId'; ids: string[] }[] = [];
+    const offices = [...new Set(scope.officeIds || [])].filter(Boolean);
+    const warehouses = [...new Set(scope.warehouseIds || [])].filter(Boolean);
+    for (let i = 0; i < offices.length; i += 30) groups.push({ field: 'officeId', ids: offices.slice(i, i + 30) });
+    for (let i = 0; i < warehouses.length; i += 30) groups.push({ field: 'warehouseId', ids: warehouses.slice(i, i + 30) });
+    if (!groups.length) { onData([]); return () => undefined; }
+    const snapshots = new Map<string, Map<string, CustodyRecord>>();
+    const unsubs = groups.map(({ field, ids }) => onSnapshot(
+      query(ref, where(field, 'in', ids), orderBy('assignedAt', 'desc')),
+      (snapshot) => {
+        snapshots.set(field + ':' + ids.join(','), new Map(snapshot.docs.map((item) => [
+          item.id, { id: item.id, ...item.data() } as CustodyRecord,
+        ])));
+        const merged = new Map<string, CustodyRecord>();
+        snapshots.forEach((items) => items.forEach((record, id) => merged.set(id, record)));
+        onData([...merged.values()].sort((a, b) => b.assignedAt.localeCompare(a.assignedAt)));
+      },
+      (error) => { handleFirestoreError(error, OperationType.GET, 'custody_cards'); onError?.(error as Error); }
+    ));
+    return () => unsubs.forEach((unsubscribe) => unsubscribe());
+  }
+  return onSnapshot(query(ref, orderBy('assignedAt', 'desc')), (snapshot) => {
+    onData(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as CustodyRecord[]);
+  }, (error) => { handleFirestoreError(error, OperationType.GET, 'custody_cards'); onError?.(error as Error); });
 }
 
 export async function addCustodyRecord(
@@ -152,6 +165,8 @@ export async function addCustodyRecord(
         assetLabel,
         employeeName: card.employeeName.trim(),
         officeName: card.officeName.trim(),
+        officeId: assetData.officeId || '',
+        warehouseId: assetData.warehouseId || '',
         assignedAt: now,
         status: 'active',
         approvalStatus: 'pending',
