@@ -127,9 +127,15 @@ export async function completeMaintenanceRecord(
       if (data.status === 'completed' || data.status === 'cancelled') {
         throw new Error('الطلب مغلق مسبقاً');
       }
+      if (!data.assetId || data.assetId !== record.assetId) {
+        throw new Error('بيانات الأصل في طلب الصيانة غير متطابقة؛ راجع الطلب قبل إغلاقه');
+      }
 
       const assetSnap = await tx.get(assetRef);
       if (!assetSnap.exists()) throw new Error('الجهاز المرتبط غير موجود');
+      if (assetSnap.data().status !== 'maintenance') {
+        throw new Error('حالة الأصل لم تعد قيد الصيانة؛ لا يمكن إغلاق الطلب قبل مراجعة حالة الأصل');
+      }
 
       const previousStatus = data.previousAssetStatus || 'available';
       const now = new Date().toISOString();
