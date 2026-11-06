@@ -94,7 +94,7 @@ export async function createAsset(asset: Omit<Asset, 'id'> & { id?: string }, ac
       tx.set(movementRef, {
         assetId,
         assetLabel: `${asset.brand} ${asset.model}`.trim(),
-        movementType: 'assigned',
+        movementType: 'created',
         toOffice: asset.officeName || 'المستودع الرئيسي',
         toOfficeName: asset.officeName || 'المستودع الرئيسي',
         toOfficeId: asset.officeId || '',
