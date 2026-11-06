@@ -7,6 +7,7 @@ import {
   orderBy,
   getDocs,
   serverTimestamp,
+  addDoc,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { Asset, AssetStatus, Office } from '../types';
@@ -249,5 +250,38 @@ export async function retireAsset(asset: Asset, reason: string = '', actorName: 
     });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `assets/${asset.id}`);
+  }
+}
+
+
+/**
+ * Persist a physical inventory verification. The record is append-only and
+ * intentionally separate from asset movements: checking an item does not
+ * change its ownership, location, or operational status.
+ */
+export async function recordInventoryCheck(
+  asset: Asset,
+  actor: { uid: string; name: string; email?: string }
+): Promise<void> {
+  if (!actor.uid) throw new Error('يجب تسجيل الدخول لتوثيق عملية الجرد');
+  const checkedAt = new Date().toISOString();
+
+  try {
+    await addDoc(collection(db, 'inventory_checks'), {
+      assetId: asset.id,
+      assetLabel: `${asset.brand} ${asset.model}`.trim(),
+      serialNumber: normalizeSerial(asset.serialNumber),
+      category: asset.category,
+      statusAtCheck: asset.status,
+      officeId: asset.officeId || '',
+      officeName: asset.officeName || 'المستودع الرئيسي',
+      checkedAt,
+      checkedByUid: actor.uid,
+      checkedByName: actor.name,
+      checkedByEmail: actor.email || '',
+      method: 'qr_or_serial',
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'inventory_checks');
   }
 }
