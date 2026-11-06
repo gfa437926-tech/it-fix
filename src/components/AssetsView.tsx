@@ -41,7 +41,11 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
   onOpenAddCustodyWithAsset,
   onOpenMaintenanceWithAsset,
 }) => {
-  const { profile, isAdmin } = useAuth();
+  const { profile } = useAuth();
+  const canCreateAssets = profile?.accessControlEnabled !== true || profile.permissions?.['assets.create'] === true;
+  const canUpdateAssets = profile?.accessControlEnabled !== true || profile.permissions?.['assets.update'] === true;
+  const canManageCustody = profile?.accessControlEnabled !== true || profile.permissions?.['custody.manage'] === true;
+  const canManageMaintenance = profile?.accessControlEnabled !== true || profile.permissions?.['maintenance.manage'] === true;
   const canRecordInventoryCheck = profile?.accessControlEnabled !== true || profile.permissions?.['inventory.manage'] === true;
   const actorName = profile?.displayName || 'المسؤول';
 
@@ -268,13 +272,13 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
             <span>مسح باركود / QR (جرد سريع)</span>
           </button>
 
-          <button
+          {canCreateAssets && <button
             onClick={openAddForm}
             className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#168C8C] hover:bg-[#137676] text-white text-sm font-bold rounded-xl shadow-xs transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>إضافة أصل جديد</span>
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -415,7 +419,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                           </button>
 
                           {/* Edit */}
-                          {isAdmin && (
+                          {canUpdateAssets && (
                             <button
                               onClick={() => openEditForm(asset)}
                               title="تعديل الجهاز"
@@ -426,7 +430,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                           )}
 
                           {/* Transfer (if available) */}
-                          {(asset.status === 'available' || asset.status === 'returned') && (
+                          {canUpdateAssets && (asset.status === 'available' || asset.status === 'returned') && (
                             <button
                               onClick={() => {
                                 setTransferingAsset(asset);
@@ -441,7 +445,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                           )}
 
                           {/* Assign Custody (if available) */}
-                          {(asset.status === 'available' || asset.status === 'returned') &&
+                          {canManageCustody && (asset.status === 'available' || asset.status === 'returned') &&
                             onOpenAddCustodyWithAsset && (
                               <button
                                 onClick={() => onOpenAddCustodyWithAsset(asset)}
@@ -466,7 +470,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                             )}
 
                           {/* Retire Asset */}
-                          {isAdmin &&
+                          {canUpdateAssets &&
                             asset.status !== 'assigned' &&
                             asset.status !== 'maintenance' &&
                             asset.status !== 'retired' && (
