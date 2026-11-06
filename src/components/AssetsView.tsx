@@ -42,6 +42,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
   onOpenMaintenanceWithAsset,
 }) => {
   const { profile, isAdmin } = useAuth();
+  const canRecordInventoryCheck = profile?.accessControlEnabled !== true || profile.permissions?.['inventory.manage'] === true;
   const actorName = profile?.displayName || 'المسؤول';
 
   // Filters
@@ -975,7 +976,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
-                        <button
+                        {canRecordInventoryCheck && <button
                           onClick={async () => {
                             if (!profile?.uid || auditSaving) return;
                             setAuditSaving(true);
@@ -999,7 +1000,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                           className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50"
                         >
                           {auditSaving ? 'جاري حفظ الجرد...' : 'تأكيد الجرد والتحقق'}
-                        </button>
+                        </button>}
                         <button
                           onClick={() => {
                             setIsScannerOpen(false);
