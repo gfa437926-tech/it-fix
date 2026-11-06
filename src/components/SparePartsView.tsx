@@ -69,6 +69,7 @@ export const SparePartsView: React.FC<SparePartsViewProps> = ({
         minimumQuantity: Number(minQty) || 0,
         unitCost: Number(unitCost) || 0,
         supplier: supplier.trim(),
+        warehouseId: profile?.warehouseIds?.[0] || '',
       });
 
       setIsAddOpen(false);
