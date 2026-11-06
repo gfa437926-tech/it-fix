@@ -24,6 +24,8 @@ export const UserManagementView: React.FC = () => {
   const { user: currentAuthUser, isAdmin } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'it_manager'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [isAddOpen, setIsAddOpen] = useState(false);
 
   // Form
@@ -97,7 +99,9 @@ export const UserManagementView: React.FC = () => {
       search.trim() === '' ||
       u.displayName.toLowerCase().includes(search.toLowerCase()) ||
       u.email.toLowerCase().includes(search.toLowerCase())
-    );
+    ) &&
+      (roleFilter === 'all' || u.role === roleFilter) &&
+      (statusFilter === 'all' || (statusFilter === 'active' ? u.isActive : !u.isActive));
   });
 
   return (
@@ -135,7 +139,18 @@ export const UserManagementView: React.FC = () => {
             className="w-full pl-4 pr-10 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
           />
         </div>
+        <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as typeof roleFilter)} aria-label="تصفية حسب الدور" className="text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl">
+          <option value="all">كل الأدوار</option>
+          <option value="admin">مدير نظام</option>
+          <option value="it_manager">مسؤول تقنية</option>
+        </select>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)} aria-label="تصفية حسب حالة الحساب" className="text-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl">
+          <option value="all">كل الحالات</option>
+          <option value="active">مفعل</option>
+          <option value="inactive">معطل</option>
+        </select>
       </div>
+      <p className="text-xs text-slate-500">عرض {filtered.length} من أصل {users.length} مستخدم</p>
 
       {/* Users Table */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
