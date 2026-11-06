@@ -265,10 +265,23 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Movements and audits timeline
+    // Movements and audit timeline inherit the location of the source record.
     match /asset_movements/{movementId} {
-      allow read: if isActiveUser() && !isScopedAccessEnabled();
-      allow create: if isAdmin();
+      allow read: if isPrimaryController() || isLegacyItManager() ||
+        (
+          isScopedAccessEnabled() &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId) &&
+          (hasPermission('assets.read') || hasPermission('custody.read') || hasPermission('maintenance.read'))
+        );
+      allow create: if isPrimaryController() || isLegacyItManager() ||
+        (
+          isScopedAccessEnabled() &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId) &&
+          (
+            hasPermission('assets.create') || hasPermission('assets.update') ||
+            hasPermission('custody.manage') || hasPermission('maintenance.manage')
+          )
+        );
       allow update, delete: if false;
     }
 
