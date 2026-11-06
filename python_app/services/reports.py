@@ -176,7 +176,7 @@ def export_management_report(
         f"{date_to.isoformat() if date_to else 'نهاية غير محددة'}"
     )
     overview.append(["فترة التقرير", period_label])
-    overview.append(["ملاحظة", "الأصول والمكاتب لقطة حالية؛ السجلات التشغيلية المؤرخة ضمن الفترة المحددة."])
+    overview.append(["ملاحظة", "مؤشرات حالة الأصول والمكاتب لقطة حالية؛ جداول الحركات والعهدة والصيانة والمشتريات والمرفقات والتدقيق تعرض السجلات ضمن الفترة المحددة."])
     metrics = [
         ("إجمالي الأصول", summary.total_assets),
         ("متوفر أو معاد للمستودع", summary.available),
