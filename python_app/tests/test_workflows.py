@@ -222,3 +222,28 @@ def test_spare_part_consumption_rejects_non_finite_or_non_positive_quantity(
             MaintenancePartUsage.maintenance_id == ticket.id
         )
     ) is None
+
+
+@pytest.mark.parametrize(
+    ("quantity", "minimum_quantity", "unit_cost"),
+    [
+        (float("nan"), 1, 10),
+        (5, float("inf"), 10),
+        (5, 1, float("nan")),
+    ],
+)
+def test_spare_part_creation_rejects_non_finite_inventory_values(
+    session: Session,
+    quantity: float,
+    minimum_quantity: float,
+    unit_cost: float,
+) -> None:
+    with pytest.raises(ValueError, match="أرقاماً محددة"):
+        create_spare_part(
+            session, "قطعة غير صالحة", "INVALID-NUMERIC-STOCK",
+            quantity, minimum_quantity, unit_cost,
+        )
+
+    assert session.scalar(
+        select(SparePart.id).where(SparePart.sku == "INVALID-NUMERIC-STOCK")
+    ) is None
