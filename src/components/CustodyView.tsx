@@ -379,6 +379,8 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
           directorate: directorate.trim(),
           department: department.trim(),
           officeName: officeName.trim(),
+          officeId: offices.find((office) => office.name === officeName)?.id || initialAssetForCustody?.officeId || '',
+          warehouseId: offices.find((office) => office.name === officeName)?.warehouseId || initialAssetForCustody?.warehouseId || '',
           officeRoom: officeRoom.trim(),
           items: cardItems,
           itDepartmentHead: itDepartmentHead.trim(),
