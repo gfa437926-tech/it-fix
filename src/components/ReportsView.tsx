@@ -195,7 +195,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       'receivedAt',
     ];
     const escapeCsv = (value: unknown) => {
-      const text = String(value ?? '');
+      let text = String(value ?? '');
+      // Prevent spreadsheet formula execution when opening exported CSV files.
+      if (/^[\s]*[=+@-]/.test(text)) text = `'${text}`;
       return `"${text.replace(/"/g, '""')}"`;
     };
     const rows = filteredAssets.map((a) => [
@@ -213,7 +215,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     ].map(escapeCsv));
 
     const csvContent =
-      '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      '\uFEFF' + [headers.map(escapeCsv).join(','), ...rows.map((r) => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
