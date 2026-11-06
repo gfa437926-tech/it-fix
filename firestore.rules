@@ -245,16 +245,29 @@ service cloud.firestore {
       allow delete: if isPrimaryController() || isLegacyItManager();
     }
 
-    // Spare parts catalog
+    // Spare-parts stock is assigned to a warehouse, not globally visible.
     match /spare_parts/{partId} {
-      allow read: if isActiveUser() && !isScopedAccessEnabled();
-      allow create, update, delete: if isAdmin();
+      allow read: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('spareparts.read') &&
+          hasAssignedScope('', resource.data.warehouseId));
+      allow create: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('spareparts.manage') &&
+          hasAssignedScope('', request.resource.data.warehouseId));
+      allow update: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('spareparts.manage') &&
+          hasAssignedScope('', resource.data.warehouseId) &&
+          hasAssignedScope('', request.resource.data.warehouseId));
+      allow delete: if isPrimaryController() || isLegacyItManager();
     }
 
-    // Maintenance parts consumption events
+    // Parts consumption is an append-only maintenance event with inherited scope.
     match /maintenance_parts/{usageId} {
-      allow read: if isActiveUser() && !isScopedAccessEnabled();
-      allow create: if isAdmin();
+      allow read: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('maintenance.read') &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
+      allow create: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('maintenance.manage') &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
       allow update, delete: if false;
     }
 
