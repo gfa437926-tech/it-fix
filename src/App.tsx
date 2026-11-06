@@ -230,7 +230,7 @@ function MainApp() {
             console.error('Seed custody err:', e);
           }
         }
-      })
+      }, undefined, profile)
     );
     unsubs.push(watchMaintenanceRecords((data) => setMaintenanceRecords(data), undefined, profile));
     unsubs.push(
