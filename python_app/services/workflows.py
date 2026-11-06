@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from datetime import datetime
 from typing import Iterable
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -452,8 +453,8 @@ def consume_spare_part(
     notes: str = "",
     actor_name: str = "المسؤول",
 ) -> MaintenancePartUsage:
-    if quantity <= 0:
-        raise ValueError("الكمية المصروفة يجب أن تكون أكبر من صفر.")
+    if not math.isfinite(quantity) or quantity <= 0:
+        raise ValueError("الكمية المصروفة يجب أن تكون رقماً موجباً ومحدداً.")
 
     with session.begin():
         part = session.get(SparePart, part_id)
@@ -468,13 +469,39 @@ def consume_spare_part(
             raise ValueError("طلب الصيانة غير موجود.")
         if ticket.status in {"completed", "cancelled"}:
             raise ValueError("لا يمكن صرف قطع لطلب صيانة مغلق.")
-        if part.quantity < quantity:
-            raise ValueError(f"المخزون المتاح ({part.quantity:g}) لا يكفي لصرف ({quantity:g}).")
-
         unit_cost = float(part.unit_cost)
         total_cost = unit_cost * quantity
-        part.quantity -= quantity
-        ticket.parts_cost = float(ticket.parts_cost or 0) + total_cost
+
+        # Conditional SQL updates prevent concurrent requests from overspending stock
+        # or adding maintenance costs based on stale ORM snapshots.
+        stock_result = session.execute(
+            update(SparePart)
+            .where(SparePart.id == part.id, SparePart.quantity >= quantity)
+            .values(quantity=SparePart.quantity - quantity, updated_at=utc_now())
+            .execution_options(synchronize_session=False)
+        )
+        if stock_result.rowcount != 1:
+            available = session.scalar(
+                select(SparePart.quantity).where(SparePart.id == part.id)
+            )
+            raise ValueError(
+                f"المخزون المتاح ({float(available or 0):g}) لا يكفي لصرف ({quantity:g})."
+            )
+
+        ticket_result = session.execute(
+            update(MaintenanceRecord)
+            .where(
+                MaintenanceRecord.id == ticket.id,
+                MaintenanceRecord.status.notin_({"completed", "cancelled"}),
+            )
+            .values(parts_cost=func.coalesce(MaintenanceRecord.parts_cost, 0) + total_cost)
+            .execution_options(synchronize_session=False)
+        )
+        if ticket_result.rowcount != 1:
+            raise ValueError("لا يمكن صرف قطع لطلب صيانة مغلق.")
+
+        session.expire(part, ["quantity"])
+        session.expire(ticket, ["parts_cost"])
         usage = MaintenancePartUsage(
             part_id=part.id,
             part_name=part.name,
