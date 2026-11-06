@@ -275,7 +275,13 @@ class MaintenancePartUsage(Base):
 
 class PurchaseRecord(Base):
     __tablename__ = "purchase_records"
-    __table_args__ = (CheckConstraint("total_cost >= 0", name="ck_purchase_total_cost"),)
+    __table_args__ = (
+        CheckConstraint("total_cost >= 0", name="ck_purchase_total_cost"),
+        UniqueConstraint(
+            "asset_id", "supplier", "invoice_number",
+            name="uq_purchase_asset_supplier_invoice",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     asset_id: Mapped[str] = mapped_column(ForeignKey("assets.id", ondelete="RESTRICT"), nullable=False)
