@@ -120,7 +120,12 @@ service cloud.firestore {
           request.resource.data.uid == uid &&
           request.resource.data.email == request.auth.token.email &&
           request.resource.data.isActive == true &&
-          request.resource.data.role == 'it_manager'
+          request.resource.data.role == 'it_manager' &&
+          request.resource.data.accessControlEnabled == true &&
+          request.resource.data.officeIds == [] &&
+          request.resource.data.warehouseIds == [] &&
+          request.resource.data.permissions is map &&
+          request.resource.data.permissions.keys().size() == 0
         );
 
       // Users can edit basic profile details only; role and activation state
