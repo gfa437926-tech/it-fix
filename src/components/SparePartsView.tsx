@@ -27,6 +27,7 @@ export const SparePartsView: React.FC<SparePartsViewProps> = ({
 }) => {
   const { profile } = useAuth();
   const actorName = profile?.displayName || 'المسؤول';
+  const canManageSpareParts = profile?.accessControlEnabled !== true || profile.permissions?.['spareparts.manage'] === true;
 
   const [search, setSearch] = useState('');
   const [filterAlert, setFilterAlert] = useState<boolean>(false);
@@ -139,7 +140,7 @@ export const SparePartsView: React.FC<SparePartsViewProps> = ({
           </p>
         </div>
 
-        <button
+        {canManageSpareParts && <button
           onClick={() => {
             setFormError('');
             setIsAddOpen(true);
@@ -148,7 +149,7 @@ export const SparePartsView: React.FC<SparePartsViewProps> = ({
         >
           <Plus className="w-4 h-4" />
           <span>إضافة قطعة جديدة</span>
-        </button>
+        </button>}
       </div>
 
       {/* Low Stock Banner if any */}
@@ -254,7 +255,7 @@ export const SparePartsView: React.FC<SparePartsViewProps> = ({
                       </td>
                       <td className="py-3.5 px-4 text-xs text-slate-600">{part.supplier || '—'}</td>
                       <td className="py-3.5 px-4 text-center">
-                        <button
+                        {canManageSpareParts && <button
                           disabled={part.quantity <= 0 || openTickets.length === 0}
                           onClick={() => {
                             setConsumingPart(part);
@@ -267,7 +268,7 @@ export const SparePartsView: React.FC<SparePartsViewProps> = ({
                         >
                           <PackageMinus className="w-3.5 h-3.5 text-amber-600" />
                           <span>صرف لصيانة</span>
-                        </button>
+                        </button>}
                       </td>
                     </tr>
                   );
