@@ -38,6 +38,53 @@ service cloud.firestore {
       return isSuperAdmin() || (isActiveUser() && userDoc().role == 'it_manager');
     }
 
+    // Legacy IT managers remain compatible until the controller explicitly
+    // enables scoped access for their profile. Once enabled, no implicit
+    // access is granted: each operation needs a permission and an assigned scope.
+    function isScopedAccessEnabled() {
+      return isActiveUser() &&
+        userDoc().keys().hasAny(['accessControlEnabled']) &&
+        userDoc().accessControlEnabled == true;
+    }
+
+    function isLegacyItManager() {
+      return isActiveUser() &&
+        userDoc().role == 'it_manager' &&
+        !isScopedAccessEnabled();
+    }
+
+    function hasPermission(permission) {
+      return userDoc().keys().hasAny(['permissions']) &&
+        userDoc().permissions is map &&
+        userDoc().permissions.get(permission, false) == true;
+    }
+
+    function hasAssignedScope(officeId, warehouseId) {
+      return (
+        officeId is string &&
+        officeId.size() > 0 &&
+        userDoc().keys().hasAny(['officeIds']) &&
+        userDoc().officeIds is list &&
+        userDoc().officeIds.hasAny([officeId])
+      ) || (
+        warehouseId is string &&
+        warehouseId.size() > 0 &&
+        userDoc().keys().hasAny(['warehouseIds']) &&
+        userDoc().warehouseIds is list &&
+        userDoc().warehouseIds.hasAny([warehouseId])
+      );
+    }
+
+    function canAccessScopedResource(permission, officeId, warehouseId) {
+      return isPrimaryController() ||
+        isLegacyItManager() ||
+        (
+          isScopedAccessEnabled() &&
+          hasPermission(permission) &&
+          hasAssignedScope(officeId, warehouseId)
+        );
+    }
+
     // Health check endpoint for testing initial connection
     match /test/connection {
       allow read: if true;
@@ -82,16 +129,26 @@ service cloud.firestore {
 
     // Offices & locations
     match /offices/{officeId} {
-      allow read: if isActiveUser();
-      allow create, update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read: if canAccessScopedResource('offices.read', officeId, resource.data.warehouseId);
+      allow create: if canAccessScopedResource('offices.manage', officeId, request.resource.data.warehouseId);
+      allow update: if canAccessScopedResource('offices.manage', officeId, resource.data.warehouseId) &&
+        canAccessScopedResource('offices.manage', officeId, request.resource.data.warehouseId);
+      allow delete: if canAccessScopedResource('offices.manage', officeId, resource.data.warehouseId);
+    }
+
+    // Warehouse directory uses the same explicit permission and assignment model.
+    match /warehouses/{warehouseId} {
+      allow read: if canAccessScopedResource('warehouses.read', '', warehouseId);
+      allow create, update, delete: if canAccessScopedResource('warehouses.manage', '', warehouseId);
     }
 
     // Assets inventory
     match /assets/{assetId} {
-      allow read: if isActiveUser();
-      allow create, update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read: if canAccessScopedResource('assets.read', resource.data.officeId, resource.data.warehouseId);
+      allow create: if canAccessScopedResource('assets.create', request.resource.data.officeId, request.resource.data.warehouseId);
+      allow update: if canAccessScopedResource('assets.update', resource.data.officeId, resource.data.warehouseId) &&
+        canAccessScopedResource('assets.update', request.resource.data.officeId, request.resource.data.warehouseId);
+      allow delete: if canAccessScopedResource('assets.delete', resource.data.officeId, resource.data.warehouseId);
     }
 
     // Unique serial number reservations
