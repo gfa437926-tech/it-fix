@@ -432,7 +432,7 @@ function MainApp() {
           )}
 
           {currentTab === 'import' && (
-            <AssetImportView assets={assets} />
+            <AssetImportView assets={assets} offices={offices} />
           )}
 
           {currentTab === 'reports' && (
