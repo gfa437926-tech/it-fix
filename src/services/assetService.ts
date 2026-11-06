@@ -255,6 +255,7 @@ export async function transferAsset(
 
       tx.update(assetRef, {
         officeId: destination.id,
+        warehouseId: destination.warehouseId || '',
         officeName: destination.name,
         transferredAt: now,
       });
