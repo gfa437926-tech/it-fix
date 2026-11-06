@@ -173,6 +173,12 @@ def test_management_report_filters_dated_records_and_validates_range(tmp_path: P
             invoices = [workbook["المشتريات والضمان"].cell(row, 5).value
                        for row in range(2, workbook["المشتريات والضمان"].max_row + 1)]
             assert invoices == ["NEW-INV"]
+            overview_rows = {
+                workbook["الملخص"].cell(row, 1).value: workbook["الملخص"].cell(row, 2).value
+                for row in range(2, workbook["الملخص"].max_row + 1)
+            }
+            assert overview_rows["فترة التقرير"] == "2026-01-01 — 2026-12-31"
+            assert "لقطة حالية" in overview_rows["ملاحظة"]
         finally:
             workbook.close()
         with pytest.raises(ValueError, match="تاريخ البداية"):
