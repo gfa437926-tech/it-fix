@@ -75,6 +75,26 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const maintenancePartsCost = filteredMaintenance.reduce((sum, record) => sum + (Number(record.partsCost) || 0), 0);
   const completedMaintenance = filteredMaintenance.filter((record) => record.status === 'completed').length;
 
+  const categoryBreakdown = Object.entries(ASSET_CATEGORY_LABELS)
+    .map(([key, label]) => ({
+      key,
+      label,
+      count: filteredAssets.filter((asset) => asset.category === key).length,
+    }))
+    .filter((item) => item.count > 0)
+    .sort((a, b) => b.count - a.count);
+  const statusBreakdown = Object.entries(ASSET_STATUS_LABELS)
+    .map(([key, info]) => ({
+      key,
+      label: info.label,
+      count: filteredAssets.filter((asset) => asset.status === key).length,
+      color: info.color,
+      background: info.bg,
+    }))
+    .filter((item) => item.count > 0)
+    .sort((a, b) => b.count - a.count);
+  const maxCategoryCount = Math.max(1, ...categoryBreakdown.map((item) => item.count));
+
   // Pre-generate QR codes for labels sheet when in QR mode
   useEffect(() => {
     if (!printQrMode) return;
@@ -353,6 +373,46 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           <p className="text-2xl font-black text-indigo-700 mt-2">{maintenancePartsCost.toLocaleString('ar-EG')}</p>
           <p className="text-[11px] text-slate-400 mt-1">قيمة القطع المسجلة في التذاكر</p>
         </div>
+      </div>
+
+      {/* Asset distribution analytics */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
+          <h3 className="font-black text-[#183B56] mb-4">توزيع الأصول حسب التصنيف</h3>
+          {categoryBreakdown.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-5">لا توجد بيانات ضمن التصفية الحالية</p>
+          ) : (
+            <div className="space-y-3">
+              {categoryBreakdown.map((item) => (
+                <div key={item.key}>
+                  <div className="flex justify-between text-xs font-bold mb-1.5">
+                    <span className="text-slate-600">{item.label}</span>
+                    <span className="text-[#183B56]">{item.count} أصل ({Math.round((item.count / Math.max(1, filteredAssets.length)) * 100)}%)</span>
+                  </div>
+                  <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div className="h-full rounded-full bg-[#168C8C]" style={{ width: `${(item.count / maxCategoryCount) * 100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+        <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
+          <h3 className="font-black text-[#183B56] mb-4">توزيع الأصول حسب الحالة</h3>
+          {statusBreakdown.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-5">لا توجد بيانات ضمن التصفية الحالية</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {statusBreakdown.map((item) => (
+                <div key={item.key} className={`rounded-xl border p-3 ${item.background}`}>
+                  <p className={`text-xs font-bold ${item.color}`}>{item.label}</p>
+                  <p className={`text-2xl font-black mt-1 ${item.color}`}>{item.count}</p>
+                  <p className="text-[10px] text-slate-500 mt-1">{Math.round((item.count / Math.max(1, filteredAssets.length)) * 100)}% من الأصول</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
 
       {/* Printable QR Code Labels Sheet View */}
