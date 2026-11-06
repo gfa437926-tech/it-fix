@@ -115,9 +115,37 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     }));
 
     const ws = XLSX.utils.json_to_sheet(data);
+    const maintenanceData = filteredMaintenance.map((record) => ({
+      'رقم التذكرة': record.id,
+      'الأصل المرتبط': record.assetLabel,
+      'عنوان العطل': record.title,
+      'وصف العطل': record.description,
+      'الأولوية': record.priority,
+      'الحالة': record.status,
+      'الفني': record.technician || '',
+      'تاريخ الفتح': record.reportedAt ? new Date(record.reportedAt).toLocaleDateString('ar-EG') : '',
+      'تاريخ الإكمال': record.completedAt ? new Date(record.completedAt).toLocaleDateString('ar-EG') : '',
+      'تكلفة العمل': Number(record.cost) || 0,
+      'تكلفة القطع': Number(record.partsCost) || 0,
+      'الإجمالي': (Number(record.cost) || 0) + (Number(record.partsCost) || 0),
+      'نتيجة الإصلاح': record.resolution || '',
+    }));
+    const maintenanceSheet = XLSX.utils.json_to_sheet(maintenanceData);
+    const summarySheet = XLSX.utils.aoa_to_sheet([
+      ['ملخص التقرير'],
+      ['الفترة', dateFrom || 'بداية السجل', dateTo || 'حتى اليوم'],
+      ['عدد الأصول', filteredAssets.length],
+      ['عدد تذاكر الصيانة', filteredMaintenance.length],
+      ['التذاكر المكتملة', completedMaintenance],
+      ['تكلفة أعمال الصيانة', maintenanceLaborCost],
+      ['تكلفة قطع الصيانة', maintenancePartsCost],
+      ['إجمالي تكلفة الصيانة', maintenanceLaborCost + maintenancePartsCost],
+    ]);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'تقرير الأصول');
-    XLSX.writeFile(wb, `تقرير_أصول_تقنية_المعلومات_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'الملخص');
+    XLSX.utils.book_append_sheet(wb, ws, 'الأصول');
+    XLSX.utils.book_append_sheet(wb, maintenanceSheet, 'الصيانة');
+    XLSX.writeFile(wb, `تقرير_الأصول_والصيانة_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   // Export to CSV
@@ -133,19 +161,25 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       'cpu',
       'ram',
       'storage',
+      'receivedAt',
     ];
+    const escapeCsv = (value: unknown) => {
+      const text = String(value ?? '');
+      return `"${text.replace(/"/g, '""')}"`;
+    };
     const rows = filteredAssets.map((a) => [
       a.id,
-      `"${a.brand}"`,
-      `"${a.model}"`,
+      a.brand,
+      a.model,
       a.category,
-      `"${a.serialNumber}"`,
-      `"${a.officeName || ''}"`,
+      a.serialNumber,
+      a.officeName || '',
       a.status,
-      `"${a.cpu || ''}"`,
-      `"${a.ram || ''}"`,
-      `"${a.storage || ''}"`,
-    ]);
+      a.cpu || '',
+      a.ram || '',
+      a.storage || '',
+      a.receivedAt || '',
+    ].map(escapeCsv));
 
     const csvContent =
       '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
