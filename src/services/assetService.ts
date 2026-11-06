@@ -8,9 +8,10 @@ import {
   getDocs,
   serverTimestamp,
   addDoc,
+  where,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { Asset, AssetStatus, Office } from '../types';
+import { Asset, AssetStatus, Office, UserProfile } from '../types';
 
 function normalizeSerial(serial: string): string {
   return serial.trim().toUpperCase();
@@ -30,11 +31,61 @@ function serialToDocId(serial: string): string {
 
 export function watchAssets(
   onData: (assets: Asset[]) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  scope?: UserProfile | null
 ) {
   const assetsRef = collection(db, 'assets');
-  const q = query(assetsRef, orderBy('brand', 'asc'));
 
+  // Firestore rules are not filters. Scoped users must issue queries whose
+  // predicates prove that every returned asset belongs to an assigned office
+  // or warehouse; otherwise Firestore correctly rejects the entire query.
+  if (scope?.accessControlEnabled === true) {
+    const officeIds = [...new Set(scope.officeIds || [])].filter(Boolean);
+    const warehouseIds = [...new Set(scope.warehouseIds || [])].filter(Boolean);
+    const groups: { field: 'officeId' | 'warehouseId'; ids: string[] }[] = [];
+    for (let i = 0; i < officeIds.length; i += 30) {
+      groups.push({ field: 'officeId', ids: officeIds.slice(i, i + 30) });
+    }
+    for (let i = 0; i < warehouseIds.length; i += 30) {
+      groups.push({ field: 'warehouseId', ids: warehouseIds.slice(i, i + 30) });
+    }
+
+    if (groups.length === 0) {
+      onData([]);
+      return () => undefined;
+    }
+
+    const snapshots = new Map<string, Asset>();
+    const unsubs = groups.map(({ field, ids }) =>
+      onSnapshot(
+        query(assetsRef, where(field, 'in', ids)),
+        (snapshot) => {
+          // Rebuild from all active query snapshots to remove records that
+          // moved outside this user's assigned scope.
+          const current = new Map<string, Asset>();
+          for (const docSnap of snapshot.docs) {
+            current.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Asset);
+          }
+          snapshots.set(field + ':' + ids.join(','), current as unknown as Asset);
+          const merged = new Map<string, Asset>();
+          for (const value of snapshots.values()) {
+            if (value instanceof Map) {
+              for (const [id, asset] of value.entries()) merged.set(id, asset);
+            }
+          }
+          onData([...merged.values()].sort((a, b) => a.brand.localeCompare(b.brand)));
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, 'assets');
+          onError?.(error as Error);
+        }
+      )
+    );
+
+    return () => unsubs.forEach((unsubscribe) => unsubscribe());
+  }
+
+  const q = query(assetsRef, orderBy('brand', 'asc'));
   return onSnapshot(
     q,
     (snapshot) => {
