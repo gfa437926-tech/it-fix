@@ -232,14 +232,16 @@ export async function rejectCustodyRecord(
       if (data.status !== 'active' || data.approvalStatus !== 'pending') {
         throw new Error('بطاقة العهدة ليست بانتظار الاعتماد');
       }
+      if (!data.assetId) throw new Error('بطاقة العهدة غير مرتبطة بمعرّف أصل');
 
-      if (data.assetId) {
-        const assetRef = doc(db, 'assets', data.assetId);
-        const assetSnap = await tx.get(assetRef);
-        if (assetSnap.exists()) {
-          tx.update(assetRef, { status: 'available' });
-        }
+      const assetRef = doc(db, 'assets', data.assetId);
+      const assetSnap = await tx.get(assetRef);
+      if (!assetSnap.exists()) throw new Error('الأصل المرتبط بالعهدة غير موجود');
+      if (assetSnap.data().status !== 'assigned') {
+        throw new Error('حالة الأصل لا تشير إلى عهدة نشطة؛ راجع سجل الأصل قبل رفض العهدة');
       }
+
+      tx.update(assetRef, { status: 'available' });
 
       const now = new Date().toISOString();
       tx.update(cardRef, {
@@ -252,7 +254,7 @@ export async function rejectCustodyRecord(
 
       const movement = doc(collection(db, 'asset_movements'));
       tx.set(movement, {
-        assetId: data.assetId || data.id,
+        assetId: data.assetId,
         assetLabel: data.assetLabel || 'بطاقة عهدة',
         movementType: 'custody_rejected',
         fromEmployee: data.responsibleName || data.employeeName,
