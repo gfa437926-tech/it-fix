@@ -274,7 +274,7 @@ function MainApp() {
     return () => {
       unsubs.forEach((u) => u());
     };
-  }, [user]);
+  }, [user, profile]);
 
   if (authLoading) {
     return (
