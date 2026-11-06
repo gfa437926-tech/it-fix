@@ -21,7 +21,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 export const UserManagementView: React.FC = () => {
-  const { user: currentAuthUser, isAdmin } = useAuth();
+  const { user: currentAuthUser, isPrimaryController } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'it_manager'>('all');
@@ -44,6 +44,10 @@ export const UserManagementView: React.FC = () => {
   }, []);
 
   const handleRoleChange = async (targetUid: string, newRole: 'admin' | 'it_manager') => {
+    if (!isPrimaryController) {
+      alert('تغيير صلاحيات المستخدمين متاح للمتحكم الأساسي فقط');
+      return;
+    }
     try {
       await updateUserRole(targetUid, newRole);
     } catch (err: unknown) {
@@ -52,6 +56,10 @@ export const UserManagementView: React.FC = () => {
   };
 
   const handleToggleActive = async (targetUser: UserProfile) => {
+    if (!isPrimaryController) {
+      alert('تغيير حالة الحسابات متاح للمتحكم الأساسي فقط');
+      return;
+    }
     if (targetUser.uid === currentAuthUser?.uid) {
       alert('لا يمكنك تعطيل حسابك الشخصي النشط');
       return;
@@ -65,6 +73,10 @@ export const UserManagementView: React.FC = () => {
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isPrimaryController) {
+      setFormError('إنشاء المستخدمين متاح للمتحكم الأساسي فقط');
+      return;
+    }
     if (!displayName.trim() || !email.trim()) {
       setFormError('الاسم والبريد الإلكتروني مطلوبان');
       return;
@@ -115,7 +127,7 @@ export const UserManagementView: React.FC = () => {
           </p>
         </div>
 
-        <button
+        {isPrimaryController && <button
           onClick={() => {
             setFormError('');
             setIsAddOpen(true);
@@ -124,7 +136,7 @@ export const UserManagementView: React.FC = () => {
         >
           <Plus className="w-4 h-4" />
           <span>إضافة مستخدم جديد</span>
-        </button>
+        </button>}
       </div>
 
       {/* Search */}
@@ -199,14 +211,14 @@ export const UserManagementView: React.FC = () => {
                       </td>
                       <td className="py-3.5 px-4">
                         <select
-                          disabled={isCurrent}
+                          disabled={!isPrimaryController || isCurrent}
                           value={userItem.role}
                           onChange={(e) =>
                             handleRoleChange(userItem.uid, e.target.value as 'admin' | 'it_manager')
                           }
                           className="text-xs font-bold py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none disabled:opacity-75 cursor-pointer"
                         >
-                          {isAdmin && <option value="admin">مدير نظام (Admin)</option>}
+                          {isPrimaryController && <option value="admin">مدير نظام (Admin)</option>}
                           <option value="it_manager">مسؤول تقنية (IT Manager)</option>
                         </select>
                       </td>
@@ -227,7 +239,7 @@ export const UserManagementView: React.FC = () => {
                       </td>
                       <td className="py-3.5 px-4 text-center">
                         <button
-                          disabled={isCurrent}
+                          disabled={!isPrimaryController || isCurrent}
                           onClick={() => handleToggleActive(userItem)}
                           className={`px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer transition-all disabled:opacity-30 ${
                             userItem.isActive
@@ -300,7 +312,7 @@ export const UserManagementView: React.FC = () => {
                   onChange={(e) => setRole(e.target.value as 'admin' | 'it_manager')}
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none text-xs font-semibold"
                 >
-                  {isAdmin && <option value="admin">مدير نظام (كامل الصلاحيات)</option>}
+                  {isPrimaryController && <option value="admin">مدير نظام (كامل الصلاحيات)</option>}
                   <option value="it_manager">مسؤول تقنية (إدارة الأصول والعهد والصيانة)</option>
                 </select>
               </div>
