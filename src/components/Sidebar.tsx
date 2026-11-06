@@ -51,7 +51,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { isAdmin, isPrimaryController, profile } = useAuth();
   const hasScopedPermission = (...permissions: string[]) =>
-    profile?.accessControlEnabled !== true || permissions.some((permission) => profile.permissions?.[permission as keyof NonNullable<typeof profile.permissions>] === true);
+    profile?.accessControlEnabled !== true ||
+    permissions.some((permission) =>
+      (profile?.permissions as Record<string, boolean> | undefined)?.[permission] === true
+    );
 
   const navItems: {
     id: NavTab;
