@@ -392,24 +392,31 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
       appliedSerials.add(normalizedSerial);
 
       try {
-        if (row.isExisting && row.existingAssetId) {
-          // Update existing asset card
-          const original = assets.find((a) => a.id === row.existingAssetId);
-          if (original) {
-            await updateAsset({
-              ...original,
-              brand: row.brand,
-              model: row.model,
-              category: row.category,
-              serialNumber: row.serialNumber,
-              officeName: row.officeName,
-              cpu: row.cpu || undefined,
-              ram: row.ram || undefined,
-              storage: row.storage || undefined,
-              status: row.status,
-            });
-            updated++;
+        if (row.isExisting) {
+          // Never report a silent success when the matched asset disappeared
+          // or the preview no longer points to a valid existing asset.
+          const original = row.existingAssetId
+            ? assets.find((a) => a.id === row.existingAssetId)
+            : undefined;
+          if (!original) {
+            failed++;
+            errors.push(`السطر ${row.rowIndex}: تعذر العثور على الأصل المطابق للتحديث؛ أعد تحميل البيانات ثم راجع الملف`);
+            continue;
           }
+
+          await updateAsset({
+            ...original,
+            brand: row.brand,
+            model: row.model,
+            category: row.category,
+            serialNumber: normalizedSerial,
+            officeName: row.officeName,
+            cpu: row.cpu || undefined,
+            ram: row.ram || undefined,
+            storage: row.storage || undefined,
+            status: row.status,
+          });
+          updated++;
         } else {
           // Create new asset card
           await createAsset(
@@ -443,7 +450,9 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
       errors,
     });
     setIsProcessing(false);
-    if (onImportComplete) onImportComplete();
+    if ((newAdded > 0 || updated > 0) && onImportComplete) {
+      onImportComplete();
+    }
   };
 
   const newCardsCount = rows.filter((r) => !r.isExisting && !r.error).length;
