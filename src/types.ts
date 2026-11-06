@@ -108,6 +108,8 @@ export interface CustodyRecord {
   directorate?: string; // المديرية
   department?: string; // الدائرة
   officeName: string; // المكتب أو اسم المكتب
+  officeId?: string;
+  warehouseId?: string;
   officeRoom?: string; // رقم المكتب / الغرفة
 
   // قائمة المواد التابعة للبطاقة (مطابقة لجدول الورقة الرسمية)
@@ -162,6 +164,8 @@ export interface MaintenanceRecord {
   title: string;
   description: string;
   priority: MaintenancePriority;
+  officeId?: string;
+  warehouseId?: string;
   status: MaintenanceStatus;
   reportedAt: string;
   technician?: string;
