@@ -221,16 +221,18 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
       const storage = (raw.storage || raw['التخزين'] || '').trim();
 
       let error = '';
+      const duplicateRow = serialNumber ? firstRowBySerial.get(serialNumber) : undefined;
+      if (serialNumber && duplicateRow === undefined) {
+        firstRowBySerial.set(serialNumber, rowIndex);
+      }
       if (!brand || !model) {
         error = 'اسم الشركة والموديل مطلوبان';
       } else if (!serialNumber) {
         error = 'الرقم التسلسلي مطلوب';
+      } else if (duplicateRow !== undefined) {
+        error = `الرقم التسلسلي مكرر داخل الملف (ظهر أولاً في السطر ${duplicateRow})`;
       } else if (statusInvalid) {
         error = 'حالة الأصل غير صحيحة؛ استخدم حالة معتمدة من النموذج';
-      } else if (firstRowBySerial.has(serialNumber)) {
-        error = `الرقم التسلسلي مكرر داخل الملف (ظهر أولاً في السطر ${firstRowBySerial.get(serialNumber)})`;
-      } else {
-        firstRowBySerial.set(serialNumber, rowIndex);
       }
 
       // Check if existing asset matches this serial
@@ -256,6 +258,12 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
         }
         if (existing.storage !== storage && storage) {
           changes.push(`التخزين: ${existing.storage || 'فارغ'} ➔ ${storage}`);
+        }
+        if (existing.category !== category) {
+          changes.push(`التصنيف: ${ASSET_CATEGORY_LABELS[existing.category]} ➔ ${ASSET_CATEGORY_LABELS[category]}`);
+        }
+        if (existing.status !== status) {
+          changes.push(`الحالة: ${ASSET_STATUS_LABELS[existing.status].label} ➔ ${ASSET_STATUS_LABELS[status].label}`);
         }
       }
 
@@ -293,17 +301,19 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
       const firstRowBySerial = new Map<string, number>();
       return updated.map((row) => {
         const serial = row.serialNumber.trim().toUpperCase();
+        const duplicateRow = serial ? firstRowBySerial.get(serial) : undefined;
+        if (serial && duplicateRow === undefined) {
+          firstRowBySerial.set(serial, row.rowIndex);
+        }
         let error = '';
         if (!row.brand.trim() || !row.model.trim()) {
           error = 'اسم الشركة والموديل مطلوبان';
         } else if (!serial) {
           error = 'الرقم التسلسلي مطلوب';
-        } else if (firstRowBySerial.has(serial)) {
-          error = `الرقم التسلسلي مكرر داخل الملف (ظهر أولاً في السطر ${firstRowBySerial.get(serial)})`;
+        } else if (duplicateRow !== undefined) {
+          error = `الرقم التسلسلي مكرر داخل الملف (ظهر أولاً في السطر ${duplicateRow})`;
         } else if (!Object.prototype.hasOwnProperty.call(ASSET_STATUS_LABELS, row.status)) {
           error = 'حالة الأصل غير صحيحة؛ اختر حالة معتمدة';
-        } else {
-          firstRowBySerial.set(serial, row.rowIndex);
         }
         const original = row.existingAssetId
           ? assets.find((asset) => asset.id === row.existingAssetId)
