@@ -119,8 +119,13 @@ export async function updateUserAccessScope(
 ) {
   const officeIds = [...new Set(access.officeIds.map((id) => id.trim()).filter(Boolean))];
   const warehouseIds = [...new Set(access.warehouseIds.map((id) => id.trim()).filter(Boolean))];
+  const selectedPermissions = Object.keys(access.permissions).length > 0
+    ? access.permissions
+    : access.accessProfile !== 'custom'
+      ? Object.fromEntries(ACCESS_PROFILE_PRESETS[access.accessProfile].map((permission) => [permission, true]))
+      : {};
   const permissions = Object.fromEntries(
-    Object.entries(access.permissions).filter(([key, value]) =>
+    Object.entries(selectedPermissions).filter(([key, value]) =>
       value === true && [
         'assets.read', 'assets.create', 'assets.update', 'assets.delete',
         'offices.read', 'offices.manage', 'warehouses.read', 'warehouses.manage',
