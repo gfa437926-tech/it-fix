@@ -338,8 +338,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             </button>
           </div>
 
+          {filteredAssets.length > 48 && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              يتم تجهيز أول 48 ملصقاً في كل دفعة طباعة. قلّص نتائج التصفية لطباعة مجموعة أخرى.
+            </p>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 print:grid-cols-3">
-            {filteredAssets.map((asset) => (
+            {filteredAssets.slice(0, 48).map((asset) => (
               <div
                 key={asset.id}
                 className="p-3 border-2 border-dashed border-slate-300 rounded-xl text-center bg-white break-inside-avoid"
