@@ -24,7 +24,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 export const UserManagementView: React.FC = () => {
-  const { user: currentAuthUser, isPrimaryController } = useAuth();
+  const { user: currentAuthUser, profile, isPrimaryController } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [offices, setOffices] = useState<Office[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -48,10 +48,10 @@ export const UserManagementView: React.FC = () => {
 
   useEffect(() => {
     const unsubUsers = watchUsers((userList) => setUsers(userList));
-    const unsubOffices = watchOffices(setOffices);
-    const unsubWarehouses = watchWarehouses(setWarehouses);
+    const unsubOffices = watchOffices(setOffices, undefined, profile);
+    const unsubWarehouses = watchWarehouses(setWarehouses, undefined, profile);
     return () => { unsubUsers(); unsubOffices(); unsubWarehouses(); };
-  }, []);
+  }, [profile]);
 
   const handleRoleChange = async (targetUid: string, newRole: 'admin' | 'it_manager') => {
     if (!isPrimaryController) {
