@@ -1227,7 +1227,7 @@ class AssetInventoryApp:
         except ValueError as exc:
             messagebox.showerror(
                 "تاريخ غير صحيح",
-                f"أدخل التاريخ بصيغة YYYY-MM-DD.\\n{exc}",
+                f"أدخل التاريخ بصيغة YYYY-MM-DD.\n{exc}",
                 parent=self.root,
             )
             return
