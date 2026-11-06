@@ -148,16 +148,3 @@ export async function updateUserAccessScope(
   }
 }
 
-/** Return a user to the legacy IT-manager policy; reserved for controlled migration. */
-export async function disableScopedAccess(uid: string) {
-  const ref = doc(db, 'users', uid);
-  try {
-    await updateDoc(ref, {
-      accessControlEnabled: false,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
-    throw error;
-  }
-}
