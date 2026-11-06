@@ -149,3 +149,33 @@ def test_failed_management_report_export_preserves_existing_file(
         assert list(tmp_path.glob(".management-report.*.tmp.xlsx")) == []
     finally:
         session.close()
+
+
+def test_management_report_filters_dated_records_and_validates_range(tmp_path: Path) -> None:
+    import pytest
+    from datetime import date
+
+    session = make_session()
+    try:
+        asset = create_asset(session, AssetInput("other", "Test", "Date range", "RPT-DATE"))
+        create_purchase_record(
+            session, asset_id=asset.id, supplier="Vendor", invoice_number="OLD-INV",
+            purchase_date="2024-01-15", warranty_until=None, total_cost=100,
+        )
+        create_purchase_record(
+            session, asset_id=asset.id, supplier="Vendor", invoice_number="NEW-INV",
+            purchase_date="2026-11-02", warranty_until=None, total_cost=200,
+        )
+        target = tmp_path / "date-filtered.xlsx"
+        export_management_report(session, target, date_from=date(2026, 1, 1), date_to=date(2026, 12, 31))
+        workbook = load_workbook(target, read_only=True, data_only=True)
+        try:
+            invoices = [workbook["المشتريات والضمان"].cell(row, 5).value
+                       for row in range(2, workbook["المشتريات والضمان"].max_row + 1)]
+            assert invoices == ["NEW-INV"]
+        finally:
+            workbook.close()
+        with pytest.raises(ValueError, match="تاريخ البداية"):
+            export_management_report(session, tmp_path / "invalid.xlsx", date_from=date(2026, 12, 1), date_to=date(2026, 1, 1))
+    finally:
+        session.close()
