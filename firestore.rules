@@ -357,10 +357,22 @@ service cloud.firestore {
       allow create, update, delete: if docId != 'controller' && isPrimaryController();
     }
 
-    // Documents and attachment metadata
+    // Document metadata follows the location of its linked asset.
     match /asset_documents/{documentId} {
-      allow read: if isActiveUser() && !isScopedAccessEnabled();
-      allow create, update, delete: if isAdmin();
+      allow read: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() &&
+          (hasPermission('documents.read') || hasPermission('documents.manage')) &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
+      allow create: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('documents.manage') &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
+      allow update: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('documents.manage') &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId) &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
+      allow delete: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('documents.manage') &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
     }
 
     // Import batches audit
