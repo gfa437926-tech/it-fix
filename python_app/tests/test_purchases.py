@@ -163,6 +163,23 @@ def test_database_rejects_duplicate_purchase_invoice(session: Session) -> None:
     assert len(list_purchase_records(session)) == 1
 
 
+def test_purchase_history_can_be_filtered_to_one_asset(session: Session) -> None:
+    first = create_asset(session, AssetInput("laptop", "HP", "ProBook", "PUR-FILTER-1"))
+    second = create_asset(session, AssetInput("monitor", "Dell", "P2422H", "PUR-FILTER-2"))
+    create_purchase_record(
+        session, asset_id=first.id, supplier="مورد أ", invoice_number="INV-A",
+        purchase_date="2026-10-01", total_cost=700,
+    )
+    create_purchase_record(
+        session, asset_id=second.id, supplier="مورد ب", invoice_number="INV-B",
+        purchase_date="2026-10-02", total_cost=200,
+    )
+
+    assert [item.invoice_number for item in list_purchase_records(session, first.id)] == ["INV-A"]
+    assert list_purchase_records(session, "   ") == []
+    assert list_purchase_records(session, "missing-asset") == []
+
+
 def test_purchase_history_is_ordered_by_purchase_date_descending(session: Session) -> None:
     asset = create_asset(session, AssetInput("printer", "HP", "LaserJet", "PUR-ORDER-1"))
     create_purchase_record(
