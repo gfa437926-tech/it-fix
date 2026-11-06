@@ -31,6 +31,7 @@ import {
   SparePart,
   AssetMovement,
   Warehouse,
+  UserPermission,
 } from './types';
 import { watchAssets } from './services/assetService';
 import { watchOffices, saveOffice } from './services/officeService';
@@ -42,9 +43,34 @@ import { watchAssetMovements } from './services/movementService';
 import { ShieldAlert, LogOut, HardDrive, Loader2 } from 'lucide-react';
 
 function MainApp() {
-  const { user, profile, loading: authLoading, signOut } = useAuth();
+  const { user, profile, loading: authLoading, signOut, isPrimaryController } = useAuth();
 
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
+
+  const tabPermissions: Partial<Record<NavTab, UserPermission[]>> = {
+    assets: ['assets.read', 'assets.create', 'assets.update', 'assets.delete'],
+    custody: ['custody.read', 'custody.manage'],
+    import: ['assets.create', 'assets.update'],
+    maintenance: ['maintenance.read', 'maintenance.manage'],
+    'service-history': ['maintenance.read', 'maintenance.manage', 'assets.read'],
+    'spare-parts': ['spareparts.read', 'spareparts.manage'],
+    offices: ['offices.read', 'offices.manage', 'assets.read'],
+    movements: ['assets.read', 'assets.update', 'custody.read', 'custody.manage', 'maintenance.read', 'maintenance.manage'],
+    documents: ['documents.read', 'documents.manage'],
+    reports: ['reports.read'],
+  };
+
+  const navigateToTab = (tab: NavTab) => {
+    if (profile?.accessControlEnabled === true) {
+      if (tab === 'google-sheets' || tab === 'users') {
+        if (!isPrimaryController) return;
+      }
+      const required = tabPermissions[tab];
+      if (required && !required.some((permission) => profile.permissions?.[permission] === true)) return;
+    }
+    setCurrentTab(tab);
+  };
+
 
   // Native Android back navigation: return to the dashboard before exiting.
   useEffect(() => {
@@ -336,9 +362,7 @@ function MainApp() {
         {/* Sidebar */}
         <Sidebar
           currentTab={currentTab}
-          onSelectTab={(tab) => {
-            setCurrentTab(tab);
-          }}
+          onSelectTab={navigateToTab}
           pendingCustodyCount={pendingCustody}
           openMaintenanceCount={openMaintenance}
           lowStockCount={lowStock}
@@ -355,10 +379,10 @@ function MainApp() {
               custodyCards={custodyCards}
               spareParts={spareParts}
               maintenanceRecords={maintenanceRecords}
-              onNavigate={(tab) => setCurrentTab(tab)}
-              onOpenAddAsset={() => setCurrentTab('assets')}
-              onOpenAddCustody={() => setCurrentTab('custody')}
-              onOpenAddMaintenance={() => setCurrentTab('maintenance')}
+              onNavigate={navigateToTab}
+              onOpenAddAsset={() => navigateToTab('assets')}
+              onOpenAddCustody={() => navigateToTab('custody')}
+              onOpenAddMaintenance={() => navigateToTab('maintenance')}
             />
           )}
 
@@ -372,11 +396,11 @@ function MainApp() {
               offices={offices}
               onOpenAddCustodyWithAsset={(asset) => {
                 setAssetForCustody(asset);
-                setCurrentTab('custody');
+                navigateToTab('custody');
               }}
               onOpenMaintenanceWithAsset={(asset) => {
                 setAssetForMaintenance(asset);
-                setCurrentTab('maintenance');
+                navigateToTab('maintenance');
               }}
             />
           )}
