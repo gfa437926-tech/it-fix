@@ -72,19 +72,19 @@ service cloud.firestore {
     }
 
     function hasAssignedScope(officeId, warehouseId) {
-      return (
-        officeId is string &&
-        officeId.size() > 0 &&
-        userDoc().keys().hasAny(['officeIds']) &&
-        userDoc().officeIds is list &&
-        userDoc().officeIds.hasAny([officeId])
-      ) || (
-        warehouseId is string &&
-        warehouseId.size() > 0 &&
-        userDoc().keys().hasAny(['warehouseIds']) &&
-        userDoc().warehouseIds is list &&
-        userDoc().warehouseIds.hasAny([warehouseId])
-      );
+      let hasOffice = officeId is string && officeId.size() > 0;
+      let hasWarehouse = warehouseId is string && warehouseId.size() > 0;
+      let officeAllowed = !hasOffice ||
+        (userDoc().keys().hasAny(['officeIds']) &&
+          userDoc().officeIds is list &&
+          userDoc().officeIds.hasAny([officeId]));
+      let warehouseAllowed = !hasWarehouse ||
+        (userDoc().keys().hasAny(['warehouseIds']) &&
+          userDoc().warehouseIds is list &&
+          userDoc().warehouseIds.hasAny([warehouseId]));
+      // A record carrying both IDs must match both assignments. An office
+      // assignment must not silently grant access to every warehouse there.
+      return (hasOffice || hasWarehouse) && officeAllowed && warehouseAllowed;
     }
 
     function canAccessScopedResource(permission, officeId, warehouseId) {
