@@ -184,6 +184,7 @@ export interface SparePart {
   minimumQuantity: number;
   unitCost: number;
   supplier: string;
+  warehouseId?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -194,6 +195,8 @@ export interface MaintenancePartUsage {
   partName: string;
   maintenanceId: string;
   assetId: string;
+  officeId?: string;
+  warehouseId?: string;
   quantity: number;
   unitCost: number;
   totalCost: number;
@@ -309,6 +312,7 @@ export type UserPermission =
   | 'warehouses.read' | 'warehouses.manage'
   | 'custody.read' | 'custody.manage'
   | 'maintenance.read' | 'maintenance.manage'
+  | 'spareparts.read' | 'spareparts.manage'
   | 'reports.read' | 'users.manage';
 
 export interface Warehouse {
