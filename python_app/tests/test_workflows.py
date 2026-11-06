@@ -202,3 +202,23 @@ def test_closed_maintenance_ticket_cannot_consume_parts(session: Session) -> Non
         consume_spare_part(session, part.id, ticket.id, 1)
 
     assert session.get(SparePart, part.id).quantity == 3
+
+
+@pytest.mark.parametrize("quantity", [0, -1, float("nan"), float("inf")])
+def test_spare_part_consumption_rejects_non_finite_or_non_positive_quantity(
+    session: Session, quantity: float
+) -> None:
+    asset = create_asset(session, AssetInput("printer", "HP", "M404dn", "PR-INVALID-QTY"))
+    ticket = open_maintenance_ticket(session, asset.id, "صيانة", "عطل")
+    part = create_spare_part(session, "حبر", "TONER-INVALID-QTY", 4, 1, 50)
+
+    with pytest.raises(ValueError, match="رقماً موجباً ومحدداً"):
+        consume_spare_part(session, part.id, ticket.id, quantity)
+
+    assert session.get(SparePart, part.id).quantity == 4
+    assert session.get(MaintenanceRecord, ticket.id).parts_cost == 0
+    assert session.scalar(
+        select(MaintenancePartUsage.id).where(
+            MaintenancePartUsage.maintenance_id == ticket.id
+        )
+    ) is None
