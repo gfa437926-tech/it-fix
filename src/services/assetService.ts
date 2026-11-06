@@ -142,6 +142,8 @@ export async function createAsset(asset: Omit<Asset, 'id'> & { id?: string }, ac
       const movementRef = doc(collection(db, 'asset_movements'));
       tx.set(movementRef, {
         assetId,
+        officeId: asset.officeId || '',
+        warehouseId: asset.warehouseId || '',
         assetLabel: `${asset.brand} ${asset.model}`.trim(),
         movementType: 'created',
         toOffice: asset.officeName || 'المستودع الرئيسي',
@@ -260,6 +262,8 @@ export async function transferAsset(
       const movementRef = doc(collection(db, 'asset_movements'));
       tx.set(movementRef, {
         assetId: asset.id,
+        officeId: destination.id,
+        warehouseId: destination.warehouseId || '',
         assetLabel: `${asset.brand} ${asset.model}`.trim(),
         movementType: 'transferred',
         occurredAt: now,
@@ -301,6 +305,8 @@ export async function retireAsset(asset: Asset, reason: string = '', actorName: 
       const movementRef = doc(collection(db, 'asset_movements'));
       tx.set(movementRef, {
         assetId: asset.id,
+        officeId: asset.officeId || '',
+        warehouseId: asset.warehouseId || '',
         assetLabel: `${asset.brand} ${asset.model}`.trim(),
         movementType: 'retired',
         occurredAt: now,
