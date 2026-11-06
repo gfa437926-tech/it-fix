@@ -315,8 +315,8 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
         } else if (!Object.prototype.hasOwnProperty.call(ASSET_STATUS_LABELS, row.status)) {
           error = 'حالة الأصل غير صحيحة؛ اختر حالة معتمدة';
         }
-        const original = row.existingAssetId
-          ? assets.find((asset) => asset.id === row.existingAssetId)
+        const original = serial
+          ? assets.find((asset) => (asset.serialNumber || '').trim().toUpperCase() === serial)
           : undefined;
         const changes: string[] = [];
         if (original) {
@@ -329,7 +329,14 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
           if (original.ram !== row.ram && row.ram) changes.push(`الذاكرة: ${original.ram || 'فارغ'} ➔ ${row.ram}`);
           if (original.storage !== row.storage && row.storage) changes.push(`التخزين: ${original.storage || 'فارغ'} ➔ ${row.storage}`);
         }
-        return { ...row, serialNumber: serial, changes, error };
+        return {
+          ...row,
+          serialNumber: serial,
+          isExisting: Boolean(original),
+          existingAssetId: original?.id,
+          changes,
+          error,
+        };
       });
     });
   };
