@@ -174,7 +174,21 @@ service cloud.firestore {
       // A scoped asset creator may check one deterministic serial reservation,
       // but cannot enumerate reservations belonging to other offices.
       allow get: if isPrimaryController() || isLegacyItManager() ||
-        (isScopedAccessEnabled() && (hasPermission('assets.read') || hasPermission('assets.create') || hasPermission('assets.update')));
+        (
+          isScopedAccessEnabled() &&
+          (
+            (!exists(/databases/$(database)/documents/asset_serials/$(serialId)) && hasPermission('assets.create')) ||
+            (
+              resource.data.assetId is string &&
+              exists(/databases/$(database)/documents/assets/$(resource.data.assetId)) &&
+              (hasPermission('assets.read') || hasPermission('assets.create') || hasPermission('assets.update')) &&
+              hasAssignedScope(
+                get(/databases/$(database)/documents/assets/$(resource.data.assetId)).data.officeId,
+                get(/databases/$(database)/documents/assets/$(resource.data.assetId)).data.warehouseId
+              )
+            )
+          )
+        );
       allow list: if isPrimaryController() || isLegacyItManager();
       allow create, update: if isPrimaryController() || isLegacyItManager() ||
         (
