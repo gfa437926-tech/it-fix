@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
@@ -131,6 +132,33 @@ def test_purchase_record_rejects_duplicate_invoice_for_same_asset_and_supplier(
             purchase_date="2026-09-02",
             total_cost=210,
         )
+
+    assert len(list_purchase_records(session)) == 1
+
+
+def test_database_rejects_duplicate_purchase_invoice(session: Session) -> None:
+    asset = create_asset(session, AssetInput("laptop", "Lenovo", "ThinkPad", "PUR-DB-UNIQUE"))
+    create_purchase_record(
+        session,
+        asset_id=asset.id,
+        supplier="المورد الموحد",
+        invoice_number="INV-UNIQUE",
+        purchase_date="2026-10-01",
+        total_cost=500,
+    )
+
+    duplicate = PurchaseRecord(
+        asset_id=asset.id,
+        asset_label="Lenovo ThinkPad",
+        supplier="المورد الموحد",
+        invoice_number="INV-UNIQUE",
+        purchase_date="2026-10-02",
+        total_cost=510,
+    )
+    session.add(duplicate)
+    with pytest.raises(IntegrityError):
+        session.flush()
+    session.rollback()
 
     assert len(list_purchase_records(session)) == 1
 
