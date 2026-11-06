@@ -163,7 +163,10 @@ service cloud.firestore {
     // Offices & locations
     match /offices/{officeId} {
       allow read: if isPrimaryController() || isLegacyItManager() ||
-        (isScopedAccessEnabled() && hasPermission('offices.read') &&
+        (isScopedAccessEnabled() &&
+          (hasPermission('offices.read') || hasPermission('offices.manage') ||
+           hasPermission('assets.read') || hasPermission('custody.read') || hasPermission('custody.manage') ||
+           hasPermission('maintenance.read') || hasPermission('maintenance.manage')) &&
           ((resource.data.id is string && userDoc().officeIds is list && resource.data.id in userDoc().officeIds) ||
            (resource.data.warehouseId is string && userDoc().warehouseIds is list && resource.data.warehouseId in userDoc().warehouseIds)));
       allow create: if canAccessScopedResource('offices.manage', officeId, request.resource.data.warehouseId);
@@ -175,7 +178,11 @@ service cloud.firestore {
     // Warehouse directory uses the same explicit permission and assignment model.
     match /warehouses/{warehouseId} {
       allow read: if isPrimaryController() || isLegacyItManager() ||
-        (isScopedAccessEnabled() && hasPermission('warehouses.read') &&
+        (isScopedAccessEnabled() &&
+          (hasPermission('warehouses.read') || hasPermission('warehouses.manage') ||
+           hasPermission('assets.read') || hasPermission('spareparts.read') || hasPermission('spareparts.manage') ||
+           hasPermission('custody.read') || hasPermission('custody.manage') ||
+           hasPermission('maintenance.read') || hasPermission('maintenance.manage')) &&
           resource.data.id is string && userDoc().warehouseIds is list && resource.data.id in userDoc().warehouseIds);
       allow create, update, delete: if canAccessScopedResource('warehouses.manage', '', warehouseId);
     }
