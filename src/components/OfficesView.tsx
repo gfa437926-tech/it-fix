@@ -81,6 +81,7 @@ export const OfficesView: React.FC<OfficesViewProps> = ({ offices, assets }) => 
     try {
       await saveOffice({
         id: editingOffice?.id,
+        warehouseId: editingOffice?.warehouseId || '',
         name: name.trim(),
         building: building.trim(),
         directorate: directorate.trim(),
