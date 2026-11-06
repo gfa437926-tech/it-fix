@@ -11,18 +11,28 @@ import {
   Mail,
   User as UserIcon,
 } from 'lucide-react';
-import { UserProfile } from '../types';
+import { Office, UserPermission, UserProfile, Warehouse } from '../types';
+import { watchOffices } from '../services/officeService';
+import { watchWarehouses } from '../services/warehouseService';
 import {
   watchUsers,
   updateUserRole,
   toggleUserActive,
   createManualUser,
+  updateUserAccessScope,
 } from '../services/userService';
 import { useAuth } from '../context/AuthContext';
 
 export const UserManagementView: React.FC = () => {
   const { user: currentAuthUser, isPrimaryController } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [offices, setOffices] = useState<Office[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [accessTarget, setAccessTarget] = useState<UserProfile | null>(null);
+  const [accessOfficeIds, setAccessOfficeIds] = useState<string[]>([]);
+  const [accessWarehouseIds, setAccessWarehouseIds] = useState<string[]>([]);
+  const [accessPermissions, setAccessPermissions] = useState<Partial<Record<UserPermission, boolean>>>({});
+  const [accessSaving, setAccessSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'it_manager'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -37,10 +47,10 @@ export const UserManagementView: React.FC = () => {
   const [formLoading, setFormLoading] = useState(false);
 
   useEffect(() => {
-    const unsub = watchUsers((userList) => {
-      setUsers(userList);
-    });
-    return () => unsub();
+    const unsubUsers = watchUsers((userList) => setUsers(userList));
+    const unsubOffices = watchOffices(setOffices);
+    const unsubWarehouses = watchWarehouses(setWarehouses);
+    return () => { unsubUsers(); unsubOffices(); unsubWarehouses(); };
   }, []);
 
   const handleRoleChange = async (targetUid: string, newRole: 'admin' | 'it_manager') => {
@@ -102,6 +112,32 @@ export const UserManagementView: React.FC = () => {
       setFormError(err instanceof Error ? err.message : 'تعذر تسجيل المستخدم');
     } finally {
       setFormLoading(false);
+    }
+  };
+
+  const openAccessEditor = (target: UserProfile) => {
+    if (!isPrimaryController) return;
+    setAccessTarget(target);
+    setAccessOfficeIds(target.officeIds || []);
+    setAccessWarehouseIds(target.warehouseIds || []);
+    setAccessPermissions(target.permissions || {});
+  };
+
+  const saveAccess = async () => {
+    if (!accessTarget || !isPrimaryController) return;
+    setAccessSaving(true);
+    try {
+      await updateUserAccessScope(accessTarget.uid, {
+        officeIds: accessOfficeIds,
+        warehouseIds: accessWarehouseIds,
+        permissions: accessPermissions,
+      });
+      setAccessTarget(null);
+      alert('تم حفظ نطاق الوصول والصلاحيات. أصبحت قواعد Firestore تطبق النطاق المحدد لهذا المستخدم.');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'تعذر حفظ الصلاحيات');
+    } finally {
+      setAccessSaving(false);
     }
   };
 
@@ -237,6 +273,14 @@ export const UserManagementView: React.FC = () => {
                         {new Date(userItem.createdAt).toLocaleDateString('ar-EG')}
                       </td>
                       <td className="py-3.5 px-4 text-center">
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                        <button
+                          disabled={!isPrimaryController || isCurrent}
+                          onClick={() => openAccessEditor(userItem)}
+                          className="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 cursor-pointer disabled:opacity-30"
+                        >
+                          النطاق والصلاحيات
+                        </button>
                         <button
                           disabled={!isPrimaryController || isCurrent}
                           onClick={() => handleToggleActive(userItem)}
@@ -248,6 +292,7 @@ export const UserManagementView: React.FC = () => {
                         >
                           {userItem.isActive ? 'تعطيل الحساب' : 'تفعيل الحساب'}
                         </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -348,6 +393,73 @@ export const UserManagementView: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {accessTarget && (
+        <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-3 mb-5">
+              <div>
+                <h3 className="text-xl font-black text-[#183B56]">نطاق الوصول والصلاحيات</h3>
+                <p className="text-xs text-slate-500 mt-1">{accessTarget.displayName} — {accessTarget.email}</p>
+              </div>
+              <button onClick={() => setAccessTarget(null)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800 mb-5">
+              عند الحفظ سيتم تفعيل الصلاحيات المقيدة لهذا المستخدم، ولن يعود مسؤول تقنية المعلومات قادراً على الوصول الشامل تلقائياً. يجب تحديد مكتب أو مستودع واحد على الأقل.
+            </div>
+            <div className="grid md:grid-cols-2 gap-5">
+              <section className="border border-slate-200 rounded-xl p-4">
+                <h4 className="font-bold text-sm text-[#183B56] mb-3">المكاتب المسموح بها</h4>
+                <div className="space-y-2 max-h-56 overflow-y-auto">
+                  {offices.filter((item) => item.isActive).map((office) => (
+                    <label key={office.id} className="flex items-center gap-2 text-xs">
+                      <input type="checkbox" checked={accessOfficeIds.includes(office.id)} onChange={(e) => setAccessOfficeIds((old) => e.target.checked ? [...old, office.id] : old.filter((id) => id !== office.id))} />
+                      <span>{office.name}</span>
+                    </label>
+                  ))}
+                  {offices.length === 0 && <p className="text-xs text-slate-400">لا توجد مكاتب مسجلة.</p>}
+                </div>
+              </section>
+              <section className="border border-slate-200 rounded-xl p-4">
+                <h4 className="font-bold text-sm text-[#183B56] mb-3">المستودعات المسموح بها</h4>
+                <div className="space-y-2 max-h-56 overflow-y-auto">
+                  {warehouses.filter((item) => item.isActive).map((warehouse) => (
+                    <label key={warehouse.id} className="flex items-center gap-2 text-xs">
+                      <input type="checkbox" checked={accessWarehouseIds.includes(warehouse.id)} onChange={(e) => setAccessWarehouseIds((old) => e.target.checked ? [...old, warehouse.id] : old.filter((id) => id !== warehouse.id))} />
+                      <span>{warehouse.name}{warehouse.code ? ` (${warehouse.code})` : ''}</span>
+                    </label>
+                  ))}
+                  {warehouses.length === 0 && <p className="text-xs text-slate-400">لا توجد مستودعات مسجلة حالياً؛ أضفها قبل إسنادها للمستخدم.</p>}
+                </div>
+              </section>
+            </div>
+            <section className="border border-slate-200 rounded-xl p-4 mt-5">
+              <h4 className="font-bold text-sm text-[#183B56] mb-3">صلاحيات العمليات</h4>
+              <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {([
+                  ['assets.read', 'عرض الأصول'], ['assets.create', 'إضافة أصول'],
+                  ['assets.update', 'تعديل الأصول'], ['assets.delete', 'حذف الأصول'],
+                  ['offices.read', 'عرض المكاتب'], ['offices.manage', 'إدارة المكاتب'],
+                  ['warehouses.read', 'عرض المستودعات'], ['warehouses.manage', 'إدارة المستودعات'],
+                  ['custody.read', 'عرض العهد'], ['custody.manage', 'إدارة العهد'],
+                  ['maintenance.read', 'عرض الصيانة'], ['maintenance.manage', 'إدارة الصيانة'],
+                  ['reports.read', 'عرض التقارير'], ['users.manage', 'إدارة المستخدمين'],
+                ] as [UserPermission, string][]).map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 text-xs p-2 rounded-lg bg-slate-50">
+                    <input type="checkbox" checked={accessPermissions[key] === true} onChange={(e) => setAccessPermissions((old) => ({ ...old, [key]: e.target.checked }))} />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </section>
+            <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
+              <button onClick={() => setAccessTarget(null)} className="px-4 py-2 text-xs font-bold text-slate-600 rounded-xl hover:bg-slate-100">إلغاء</button>
+              <button onClick={saveAccess} disabled={accessSaving || (accessOfficeIds.length === 0 && accessWarehouseIds.length === 0)} className="px-5 py-2 text-xs font-bold bg-[#183B56] text-white rounded-xl disabled:opacity-50">
+                {accessSaving ? 'جارٍ الحفظ...' : 'حفظ وتفعيل الصلاحيات المقيدة'}
+              </button>
+            </div>
           </div>
         </div>
       )}
