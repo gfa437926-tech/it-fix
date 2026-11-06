@@ -214,17 +214,35 @@ service cloud.firestore {
         );
     }
 
-    // Custody assignments
+    // Custody assignments: every scoped card carries its office/warehouse IDs.
     match /custody_cards/{cardId} {
-      allow read: if isActiveUser() && !isScopedAccessEnabled();
-      allow create, update, delete: if isAdmin();
+      allow read: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('custody.read') &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
+      allow create: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('custody.manage') &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
+      allow update: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('custody.manage') &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId) &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
+      // Custody history is retained; scoped users cannot delete official records.
+      allow delete: if isPrimaryController() || isLegacyItManager();
     }
 
-    // Maintenance records and service history
+    // Maintenance requests inherit the same location scope as their asset.
     match /maintenance_records/{recordId} {
-      allow read: if isActiveUser() && !isScopedAccessEnabled();
-      allow create, update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('maintenance.read') &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
+      allow create: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('maintenance.manage') &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
+      allow update: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('maintenance.manage') &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId) &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
+      allow delete: if isPrimaryController() || isLegacyItManager();
     }
 
     // Spare parts catalog
