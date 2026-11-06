@@ -267,7 +267,7 @@ function MainApp() {
             console.error('Seed parts err:', e);
           }
         }
-      })
+      }, undefined, profile)
     );
     unsubs.push(watchAssetMovements(100, (data) => setMovements(data), undefined, profile));
 
