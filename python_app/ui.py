@@ -645,6 +645,13 @@ class AssetInventoryApp:
         )
         self.document_asset_combo.pack(side="right", padx=4)
         self.document_asset_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_documents())
+        ttk.Label(toolbar, text="فاتورة الشراء المرتبطة").pack(side="right", padx=(8, 4))
+        self.document_purchase_choice = tk.StringVar()
+        self.document_purchase_combo = ttk.Combobox(
+            toolbar, textvariable=self.document_purchase_choice,
+            state="readonly", width=38,
+        )
+        self.document_purchase_combo.pack(side="right", padx=4)
         ttk.Button(toolbar, text="إرفاق مستند", command=self.attach_document).pack(side="left", padx=4)
         ttk.Button(toolbar, text="فتح المرفق", command=self.open_selected_document).pack(side="left", padx=4)
         ttk.Button(toolbar, text="تحديث", command=self.refresh_documents).pack(side="left", padx=4)
@@ -655,14 +662,14 @@ class AssetInventoryApp:
         ).pack(anchor="e", pady=(0, 8))
         self.documents_tree = self._tree(
             self.documents_tab,
-            ("id", "file", "type", "content_type", "size", "uploaded", "date"),
+            ("id", "file", "type", "invoice", "content_type", "size", "uploaded", "date"),
             {
                 "id": "المعرّف", "file": "اسم الملف", "type": "التصنيف",
-                "content_type": "نوع المحتوى", "size": "الحجم", "uploaded": "أضيف بواسطة",
-                "date": "تاريخ الإرفاق",
+                "invoice": "فاتورة الشراء", "content_type": "نوع المحتوى",
+                "size": "الحجم", "uploaded": "أضيف بواسطة", "date": "تاريخ الإرفاق",
             },
-            {"id": 180, "file": 250, "type": 100, "content_type": 150,
-             "size": 100, "uploaded": 150, "date": 120},
+            {"id": 160, "file": 220, "type": 90, "invoice": 150,
+             "content_type": 135, "size": 90, "uploaded": 130, "date": 120},
         )
 
     def _build_users_tab(self) -> None:
@@ -996,6 +1003,7 @@ class AssetInventoryApp:
             if selected_asset_id not in {asset.id for asset in assets}:
                 selected_asset_id = assets[0].id if assets else None
             documents = list_asset_documents(session, selected_asset_id) if selected_asset_id else []
+            purchases = list_purchase_records(session, selected_asset_id) if selected_asset_id else []
 
         self._document_asset_ids = {}
         choices: list[str] = []
@@ -1010,6 +1018,20 @@ class AssetInventoryApp:
         )
         self.document_asset_choice.set(selected_label)
 
+        self._document_purchase_ids = {}
+        purchase_choices: list[str] = []
+        purchase_labels_by_id: dict[str, str] = {}
+        for purchase in purchases:
+            label = f"{purchase.invoice_number} — {purchase.supplier} — {purchase.purchase_date}"
+            self._document_purchase_ids[label] = purchase.id
+            purchase_labels_by_id[purchase.id] = purchase.invoice_number
+            purchase_choices.append(label)
+        self.document_purchase_combo.configure(values=["بدون ربط بفاتورة", *purchase_choices])
+        current_purchase = self.document_purchase_choice.get()
+        if current_purchase not in purchase_choices:
+            current_purchase = "بدون ربط بفاتورة"
+        self.document_purchase_choice.set(current_purchase)
+
         self.documents_tree.delete(*self.documents_tree.get_children())
         type_labels = {
             "invoice": "فاتورة", "warranty": "ضمان", "manual": "دليل",
@@ -1020,6 +1042,7 @@ class AssetInventoryApp:
                 document.id,
                 document.file_name,
                 type_labels.get(document.document_type, document.document_type),
+                purchase_labels_by_id.get(document.purchase_record_id, "—"),
                 document.content_type,
                 f"{document.size_bytes / 1024:.1f} KB",
                 document.uploaded_by,
@@ -1054,6 +1077,11 @@ class AssetInventoryApp:
             "صورة": "photo", "أخرى": "other",
         }
         document_type = type_map.get(raw_type.strip(), raw_type.strip().lower())
+        selected_purchase = self.document_purchase_choice.get()
+        purchase_record_id = (
+            getattr(self, "_document_purchase_ids", {}).get(selected_purchase)
+            if document_type == "invoice" else None
+        )
         try:
             with SessionLocal() as session:
                 document = attach_asset_document(
@@ -1062,11 +1090,16 @@ class AssetInventoryApp:
                     source_path=source,
                     uploaded_by=self.actor_name,
                     document_type=document_type,
+                    purchase_record_id=purchase_record_id,
                 )
             self.refresh_documents()
+            linked_message = (
+                f" وربطه بالفاتورة {selected_purchase}."
+                if purchase_record_id else " دون ربطه بفاتورة شراء محددة."
+            )
             messagebox.showinfo(
                 "تم إرفاق المستند",
-                f"تم حفظ {document.file_name} وربطه بالأصل المحدد.",
+                f"تم حفظ {document.file_name} وربطه بالأصل المحدد.{linked_message}",
                 parent=self.root,
             )
         except Exception as exc:
@@ -1798,407 +1831,3 @@ class AssetInventoryApp:
             return
 
         supplier = simpledialog.askstring("فاتورة شراء", "اسم المورد:", parent=self.root)
-        if supplier is None:
-            return
-        invoice_number = simpledialog.askstring("فاتورة شراء", "رقم الفاتورة:", parent=self.root)
-        if invoice_number is None:
-            return
-        purchase_date = simpledialog.askstring(
-            "فاتورة شراء", "تاريخ الشراء (YYYY-MM-DD):",
-            initialvalue=datetime.now().date().isoformat(), parent=self.root,
-        )
-        if purchase_date is None:
-            return
-        warranty_until = simpledialog.askstring(
-            "الضمان", "تاريخ انتهاء الضمان (YYYY-MM-DD) — اتركه فارغاً إن لم يوجد:",
-            parent=self.root,
-        )
-        if warranty_until is None:
-            return
-        total_cost_text = simpledialog.askstring("قيمة الفاتورة", "إجمالي القيمة:", initialvalue="0", parent=self.root)
-        if total_cost_text is None:
-            return
-        try:
-            total_cost = float(total_cost_text.replace(",", ".").replace("٫", "."))
-        except ValueError:
-            messagebox.showerror("قيمة غير صحيحة", "أدخل قيمة رقمية صحيحة للفاتورة.", parent=self.root)
-            return
-        notes = simpledialog.askstring("ملاحظات الفاتورة", "ملاحظات (اختياري):", parent=self.root) or ""
-
-        try:
-            with SessionLocal() as session:
-                create_purchase_record(
-                    session,
-                    asset_id=asset_id,
-                    supplier=supplier,
-                    invoice_number=invoice_number,
-                    purchase_date=purchase_date,
-                    warranty_until=warranty_until,
-                    total_cost=total_cost,
-                    notes=notes,
-                    actor_name=self.actor_name,
-                )
-            self.refresh_purchases()
-            messagebox.showinfo("تم التسجيل", "تم ربط الفاتورة بالأصل وإضافتها إلى سجل المشتريات.", parent=self.root)
-        except Exception as exc:
-            messagebox.showerror("تعذر تسجيل الفاتورة", str(exc), parent=self.root)
-
-    def add_spare_part(self) -> None:
-        if not self._ensure_active_session():
-            return
-        name = simpledialog.askstring("قطعة غيار", "اسم القطعة:", parent=self.root)
-        if not name:
-            return
-        sku = simpledialog.askstring("قطعة غيار", "رمز القطعة SKU:", parent=self.root)
-        if not sku:
-            return
-        values: list[float] = []
-        for prompt, initial in [
-            ("الكمية الحالية:", "0"),
-            ("الحد الأدنى للمخزون:", "0"),
-            ("سعر الوحدة:", "0"),
-        ]:
-            raw = simpledialog.askstring("بيانات المخزون", prompt, initialvalue=initial, parent=self.root)
-            if raw is None:
-                return
-            try:
-                values.append(float(raw.replace(",", ".")))
-            except ValueError:
-                messagebox.showerror("قيمة غير صحيحة", "أدخل قيمة رقمية صحيحة.", parent=self.root)
-                return
-        supplier = simpledialog.askstring("المورد", "اسم المورد (اختياري):", parent=self.root) or ""
-        try:
-            with SessionLocal() as session:
-                create_spare_part(session, name, sku, values[0], values[1], values[2], supplier)
-            self.refresh_spare_parts()
-            messagebox.showinfo("تمت الإضافة", "تم تسجيل قطعة الغيار في المخزون.", parent=self.root)
-        except Exception as exc:
-            messagebox.showerror("تعذر حفظ القطعة", str(exc), parent=self.root)
-
-    def consume_selected_spare_part(self) -> None:
-        if not self._ensure_active_session():
-            return
-        part = self._selected_spare_part()
-        if part is None:
-            return
-        ticket_label = self.maintenance_ticket_choice.get()
-        ticket_id = getattr(self, "_maintenance_ticket_ids", {}).get(ticket_label)
-        if not ticket_id:
-            messagebox.showinfo("اختر طلب صيانة", "اختر طلب الصيانة من القائمة قبل صرف القطعة.", parent=self.root)
-            return
-        quantity_text = simpledialog.askstring("صرف قطعة غيار", "الكمية المراد صرفها:", initialvalue="1", parent=self.root)
-        if not quantity_text:
-            return
-        try:
-            quantity = float(quantity_text.replace(",", "."))
-            with SessionLocal() as session:
-                consume_spare_part(
-                    session, part.id, ticket_id, quantity,
-                    actor_name=self.actor_name,
-                )
-            self.refresh_all()
-            messagebox.showinfo("تم صرف القطعة", "تم خصم الكمية وتحديث تكلفة قطع الغيار في طلب الصيانة.", parent=self.root)
-        except Exception as exc:
-            messagebox.showerror("تعذر صرف القطعة", str(exc), parent=self.root)
-
-    def _selected_asset(self) -> Asset | None:
-        selected = self.assets_tree.selection()
-        if not selected:
-            messagebox.showinfo("تحديد أصل", "حدد أصلاً من الجدول أولاً.", parent=self.root)
-            return None
-        with SessionLocal() as session:
-            return session.get(Asset, selected[0])
-
-    def add_asset(self) -> None:
-        if not self._ensure_active_session():
-            return
-        with SessionLocal() as session:
-            offices = list_offices(session, active_only=True)
-        dialog = AssetDialog(self.root, offices)
-        self.root.wait_window(dialog)
-        if dialog.result is None:
-            return
-        try:
-            with SessionLocal() as session:
-                create_asset(session, dialog.result, self.actor_name)
-            self.refresh_all()
-            messagebox.showinfo("تم الحفظ", "تم تسجيل الأصل وحفظ حركة إضافته.", parent=self.root)
-        except Exception as exc:
-            messagebox.showerror("تعذر الحفظ", str(exc), parent=self.root)
-
-    def edit_asset(self) -> None:
-        if not self._ensure_active_session():
-            return
-        asset = self._selected_asset()
-        if asset is None:
-            return
-        with SessionLocal() as session:
-            offices = list_offices(session, active_only=True)
-        dialog = AssetDialog(self.root, offices, asset)
-        self.root.wait_window(dialog)
-        if dialog.result is None:
-            return
-        try:
-            with SessionLocal() as session:
-                update_asset(session, asset.id, dialog.result, self.actor_name)
-            self.refresh_all()
-            messagebox.showinfo("تم التعديل", "تم تحديث بيانات الأصل.", parent=self.root)
-        except Exception as exc:
-            messagebox.showerror("تعذر التعديل", str(exc), parent=self.root)
-
-    def transfer_selected_asset(self) -> None:
-        if not self._ensure_active_session():
-            return
-        asset = self._selected_asset()
-        if asset is None:
-            return
-        with SessionLocal() as session:
-            offices = [office for office in list_offices(session, active_only=True) if office.id != asset.office_id]
-        if not offices:
-            messagebox.showinfo("نقل الأصل", "أضف مكتباً فعالاً آخر قبل النقل.", parent=self.root)
-            return
-        labels = [f"{office.name} — {office.building or 'بدون مبنى'}" for office in offices]
-        choice = simpledialog.askstring(
-            "نقل الأصل", "اكتب اسم المكتب الوجهة كما يظهر هنا:\n" + "\n".join(labels),
-            parent=self.root,
-        )
-        if not choice:
-            return
-        destination_by_label = {
-            f"{office.name} — {office.building or 'بدون مبنى'}": office for office in offices
-        }
-        destination = destination_by_label.get(choice.strip())
-        if destination is None:
-            destination = next((office for office in offices if office.name == choice.strip()), None)
-        if destination is None:
-            messagebox.showerror("اختيار غير صحيح", "لم أتعرف على اسم المكتب المدخل.", parent=self.root)
-            return
-        notes = simpledialog.askstring("ملاحظات النقل", "سبب أو ملاحظات النقل (اختياري):", parent=self.root) or ""
-        try:
-            with SessionLocal() as session:
-                transfer_asset(session, asset.id, destination.id, notes, self.actor_name)
-            self.refresh_all()
-            messagebox.showinfo("تم النقل", "تم نقل الأصل وتسجيل الحركة.", parent=self.root)
-        except Exception as exc:
-            messagebox.showerror("تعذر النقل", str(exc), parent=self.root)
-
-    def retire_selected_asset(self) -> None:
-        if not self._ensure_active_session():
-            return
-        asset = self._selected_asset()
-        if asset is None:
-            return
-        reason = simpledialog.askstring("استبعاد أصل", "أدخل سبب الاستبعاد:", parent=self.root)
-        if reason is None:
-            return
-        try:
-            with SessionLocal() as session:
-                retire_asset(session, asset.id, reason, self.actor_name)
-            self.refresh_all()
-            messagebox.showinfo("تم الاستبعاد", "تم استبعاد الأصل وتسجيل السبب في سجل الحركات.", parent=self.root)
-        except Exception as exc:
-            messagebox.showerror("تعذر الاستبعاد", str(exc), parent=self.root)
-
-    def add_office(self) -> None:
-        if not self._ensure_active_session():
-            return
-        dialog = OfficeDialog(self.root)
-        self.root.wait_window(dialog)
-        if dialog.result is None:
-            return
-        try:
-            with SessionLocal() as session:
-                create_office(session, *dialog.result, actor_name=self.actor_name)
-            self.refresh_all()
-            messagebox.showinfo("تم الحفظ", "تم إضافة المكتب.", parent=self.root)
-        except Exception as exc:
-            messagebox.showerror("تعذر الحفظ", str(exc), parent=self.root)
-
-    def _selected_office(self) -> Office | None:
-        selected = self.offices_tree.selection()
-        if not selected:
-            messagebox.showinfo("تحديد مكتب", "حدد مكتباً من الجدول أولاً.", parent=self.root)
-            return None
-        with SessionLocal() as session:
-            return session.get(Office, selected[0])
-
-    def edit_office(self) -> None:
-        if not self._ensure_active_session():
-            return
-        office = self._selected_office()
-        if office is None:
-            return
-        dialog = OfficeDialog(self.root, office)
-        self.root.wait_window(dialog)
-        if dialog.result is None:
-            return
-        try:
-            with SessionLocal() as session:
-                update_office(session, office.id, *dialog.result, actor_name=self.actor_name)
-            self.refresh_all()
-            messagebox.showinfo("تم التعديل", "تم تحديث بيانات المكتب.", parent=self.root)
-        except Exception as exc:
-            messagebox.showerror("تعذر تعديل المكتب", str(exc), parent=self.root)
-
-    def toggle_selected_office(self) -> None:
-        if not self._ensure_active_session():
-            return
-        office = self._selected_office()
-        if office is None:
-            return
-        next_state = not office.is_active
-        label = "تفعيل" if next_state else "إيقاف"
-        if not messagebox.askyesno(
-            label + " المكتب",
-            f"هل تريد {label} المكتب {office.name}؟",
-            parent=self.root,
-        ):
-            return
-        try:
-            with SessionLocal() as session:
-                set_office_active(session, office.id, next_state, self.actor_name)
-            self.refresh_all()
-        except Exception as exc:
-            messagebox.showerror("تعذر تغيير حالة المكتب", str(exc), parent=self.root)
-
-    def import_excel(self) -> None:
-        if not self._ensure_active_session():
-            return
-        path = filedialog.askopenfilename(
-            parent=self.root, title="اختر ملف Excel",
-            filetypes=[("Excel workbook", "*.xlsx *.xlsm")],
-        )
-        if not path:
-            return
-        try:
-            with SessionLocal() as session:
-                result = import_assets_from_excel(session, path, self.actor_name)
-            lines = [
-                f"رقم الدفعة: {result.batch_id}",
-                f"الصفوف الكلية: {result.total_rows}",
-                f"تم استيرادها: {result.succeeded_rows}",
-                f"فشل استيرادها: {result.failed_rows}",
-                f"تم تجاوزها: {result.skipped_rows}",
-            ]
-            lines.extend(result.row_errors[:100])
-            self.import_log.configure(state="normal")
-            self.import_log.delete("1.0", "end")
-            self.import_log.insert("1.0", "\n".join(lines))
-            self.import_log.configure(state="disabled")
-            self.refresh_all()
-            messagebox.showinfo("اكتمل الاستيراد", "\n".join(lines[:5]), parent=self.root)
-        except Exception as exc:
-            messagebox.showerror("فشل الاستيراد", str(exc), parent=self.root)
-
-    def export_excel(self) -> None:
-        if not self._ensure_active_session():
-            return
-        path = filedialog.asksaveasfilename(
-            parent=self.root, title="حفظ ملف جرد الأصول",
-            defaultextension=".xlsx", initialfile="ITFix-Assets.xlsx",
-            filetypes=[("Excel workbook", "*.xlsx")],
-        )
-        if not path:
-            return
-        try:
-            with SessionLocal() as session:
-                count = export_assets_to_excel(session, path)
-            messagebox.showinfo("تم التصدير", f"تم تصدير {count} أصلاً إلى ملف Excel.", parent=self.root)
-        except Exception as exc:
-            messagebox.showerror("فشل التصدير", str(exc), parent=self.root)
-
-    def export_template(self) -> None:
-        if not self._ensure_active_session():
-            return
-        path = filedialog.asksaveasfilename(
-            parent=self.root, title="حفظ قالب الاستيراد",
-            defaultextension=".xlsx", initialfile="ITFix-Import-Template.xlsx",
-            filetypes=[("Excel workbook", "*.xlsx")],
-        )
-        if not path:
-            return
-        from openpyxl import Workbook
-        workbook = Workbook()
-        sheet = workbook.active
-        sheet.title = "الأصول"
-        sheet.append(["الفئة", "الشركة المصنعة", "الطراز", "الرقم التسلسلي", "الحالة", "المكتب", "المعالج", "الذاكرة", "التخزين"])
-        sheet.append(["لابتوب", "HP", "ProBook", "SN-001", "متوفر", "المستودع الرئيسي", "Core i5", "8GB", "256GB SSD"])
-        sheet.freeze_panes = "A2"
-        sheet.auto_filter.ref = sheet.dimensions
-        try:
-            workbook.save(path)
-            messagebox.showinfo("تم إنشاء القالب", "يمكنك تعبئة القالب ثم استيراده من الشاشة نفسها.", parent=self.root)
-        except Exception as exc:
-            messagebox.showerror("تعذر إنشاء القالب", str(exc), parent=self.root)
-
-    def show_database_health(self) -> None:
-        healthy, detail = database_health()
-        label = "متصل" if healthy else "غير متصل"
-        messagebox.showinfo("حالة قاعدة البيانات", f"الحالة: {label}\nالنوع أو التفاصيل: {detail}", parent=self.root)
-
-
-def _complete_required_password_change(root: tk.Tk, user: AppUser) -> bool:
-    while user.must_change_password:
-        current = simpledialog.askstring(
-            "تغيير كلمة المرور مطلوب",
-            "الحساب جديد. أدخل كلمة المرور الأولية التي استلمتها:",
-            show="*", parent=root,
-        )
-        if current is None:
-            return False
-        new = simpledialog.askstring(
-            "تعيين كلمة مرور جديدة",
-            "اختر كلمة مرور جديدة لا تقل عن 12 محرفاً:",
-            show="*", parent=root,
-        )
-        if new is None:
-            return False
-        confirm = simpledialog.askstring(
-            "تأكيد كلمة المرور",
-            "أعد إدخال كلمة المرور الجديدة:",
-            show="*", parent=root,
-        )
-        if confirm is None:
-            return False
-        if new != confirm:
-            messagebox.showerror("كلمتا المرور مختلفتان", "تأكد من تطابق كلمتي المرور.", parent=root)
-            continue
-        try:
-            with SessionLocal() as session:
-                change_own_password(session, user.id, current, new)
-            user.must_change_password = False
-            return True
-        except Exception as exc:
-            messagebox.showerror("تعذر تغيير كلمة المرور", str(exc), parent=root)
-    return True
-
-
-def run_app() -> None:
-    root = tk.Tk()
-    root.withdraw()
-    try:
-        from .database import initialize_database
-        initialize_database()
-    except Exception as exc:
-        messagebox.showerror(
-            "تعذر تهيئة قاعدة البيانات",
-            f"{exc}\n\nراجع إعدادات python_app/.env ودليل python_app/README.md.",
-            parent=root,
-        )
-        root.destroy()
-        return
-
-    login = LoginDialog(root)
-    root.wait_window(login)
-    user = login.user
-    if user is None:
-        root.destroy()
-        return
-
-    root.deiconify()
-    if not _complete_required_password_change(root, user):
-        root.destroy()
-        return
-
-    AssetInventoryApp(root, user)
-    root.mainloop()
