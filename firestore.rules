@@ -27,8 +27,7 @@ service cloud.firestore {
     function isSuperAdmin() {
       // Keep elevated account administration bound to the immutable controller UID.
       // A profile role alone must never grant privilege to promote or disable users.
-      return isPrimaryController() ||
-        (signedIn() && request.auth.token.email == 'gfa437926@gmail.com');
+      return isPrimaryController();
     }
 
     function isActiveUser() {
@@ -58,8 +57,7 @@ service cloud.firestore {
         request.resource.data.isActive == true &&
         (
           request.resource.data.role == 'it_manager' ||
-          (isPrimaryController() && request.resource.data.role == 'admin') ||
-          (request.auth.token.email == 'gfa437926@gmail.com' && request.resource.data.role == 'admin')
+          (isPrimaryController() && request.resource.data.role == 'admin')
         );
 
       // Users can edit basic profile details only; role and activation state
