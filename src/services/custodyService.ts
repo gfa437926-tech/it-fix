@@ -21,6 +21,12 @@ export async function saveOfficialCustodyCard(
   actorName: string,
   actorEmail?: string
 ): Promise<string> {
+  const responsibleName = card.responsibleName.trim();
+  const officeName = card.officeName.trim();
+  if (!responsibleName) throw new Error('اسم الموظف المسؤول مطلوب');
+  if (!officeName) throw new Error('اسم المكتب مطلوب');
+  if (!Array.isArray(card.items)) throw new Error('قائمة محتويات العهدة غير صالحة');
+
   const cardId = card.id || doc(collection(db, 'custody_cards')).id;
   const cardRef = doc(db, 'custody_cards', cardId);
   const now = new Date().toISOString();
@@ -333,6 +339,11 @@ export async function transferCustodyRecord(
   actorUid: string,
   actorName: string
 ) {
+  const employeeName = newEmployeeName.trim();
+  const officeName = newOfficeName.trim();
+  if (!employeeName) throw new Error('اسم الموظف الجديد مطلوب');
+  if (!officeName) throw new Error('اسم المكتب الجديد مطلوب');
+
   const cardRef = doc(db, 'custody_cards', card.id);
 
   try {
@@ -354,13 +365,13 @@ export async function transferCustodyRecord(
 
       const now = new Date().toISOString();
       tx.update(assetRef, {
-        officeName: newOfficeName.trim(),
+        officeName,
       });
 
       tx.update(cardRef, {
-        responsibleName: newEmployeeName.trim(),
-        employeeName: newEmployeeName.trim(),
-        officeName: newOfficeName.trim(),
+        responsibleName: employeeName,
+        employeeName,
+        officeName,
         transferredAt: now,
       });
 
