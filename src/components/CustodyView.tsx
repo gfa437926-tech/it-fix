@@ -469,7 +469,7 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
       {/* Primary Controller Access Banner */}
       <div
         className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-          isPrimaryController
+          canManageCustody
             ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
             : 'bg-amber-50/80 border-amber-200 text-amber-900'
         }`}
@@ -477,18 +477,18 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
         <div className="flex items-center gap-3">
           <div
             className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              isPrimaryController
+              canManageCustody
                 ? 'bg-emerald-200 text-emerald-800'
                 : 'bg-amber-200 text-amber-800'
             }`}
           >
-            {isPrimaryController ? <Shield className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
+            {canManageCustody ? <Shield className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h4 className="font-bold text-sm">
-                {isPrimaryController
-                  ? 'المتحكم المعتمد بالمنظومة والحساب المرتبط'
+                {canManageCustody
+                  ? 'مستخدم مخول بإدارة بطاقات العهد ضمن نطاقه'
                   : 'وضع الاطلاع والبحث (Read-Only)'}
               </h4>
               <span className="text-[11px] px-2 py-0.5 rounded-full font-bold bg-white/80 border">
@@ -496,9 +496,9 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
               </span>
             </div>
             <p className="text-xs opacity-85 mt-0.5">
-              {isPrimaryController
-                ? 'أنت الشخص الوحيد المخول بإدخال وتعديل بطاقات العهدة، ويتم ربط ومزامنة البيانات تلقائياً مع Google Drive و Google Sheets.'
-                : 'يمكنك استعراض وبحث وطباعة بطاقات العهدة. عمليات الإدخال والتعديل محصورة بالمتحكم الأول.'}
+              {canManageCustody
+                ? 'يمكنك إدخال وتعديل بطاقات العهد ضمن المكاتب والمستودعات المسندة إليك.'
+                : 'يمكنك استعراض وبحث وطباعة بطاقات العهدة فقط. لا تملك صلاحية التعديل ضمن نطاقك الحالي.'}
             </p>
           </div>
         </div>
