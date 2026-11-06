@@ -233,26 +233,28 @@ export async function transferAsset(
     await runTransaction(db, async (tx) => {
       const assetSnap = await tx.get(assetRef);
       const officeSnap = await tx.get(officeRef);
-      // Read every linked document before writing: its office/warehouse scope
-      // must move atomically with the asset so scoped users at the destination
-      // do not lose access to its existing paperwork.
-      const linkedDocumentsQuery = query(
-        collection(db, 'asset_documents'),
-        where('assetId', '==', asset.id)
-      );
-      const linkedDocumentsSnap = await tx.get(linkedDocumentsQuery);
 
       if (!assetSnap.exists()) throw new Error('الجهاز غير موجود');
       if (!officeSnap.exists() || !officeSnap.data().isActive) {
         throw new Error('المكتب الوجهة غير موجود أو غير فعال');
       }
 
+      const fromOfficeId = assetSnap.data().officeId || '';
+      // Constrain the document query to the asset's current office. Besides
+      // reducing the read set, this lets Firestore prove the caller's scoped
+      // read access instead of issuing an unbounded assetId-only query.
+      const linkedDocumentsQuery = query(
+        collection(db, 'asset_documents'),
+        where('assetId', '==', asset.id),
+        where('officeId', '==', fromOfficeId)
+      );
+      const linkedDocumentsSnap = await tx.get(linkedDocumentsQuery);
+
       const currentStatus = assetSnap.data().status as AssetStatus;
       if (currentStatus !== 'available' && currentStatus !== 'returned') {
         throw new Error('لا يمكن نقل الجهاز إلا إذا كان متاحاً وغير مرتبط بعهدة نشطة أو صيانة');
       }
 
-      const fromOfficeId = assetSnap.data().officeId || '';
       const fromOfficeName = assetSnap.data().officeName || 'غير محدد';
 
       if (fromOfficeId === destination.id) {
