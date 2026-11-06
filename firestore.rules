@@ -67,6 +67,10 @@ service cloud.firestore {
         userDoc().permissions.get(permission, false) == true;
     }
 
+    function hasAnyPermission(first, second, third) {
+      return hasPermission(first) || hasPermission(second) || hasPermission(third);
+    }
+
     function hasAssignedScope(officeId, warehouseId) {
       return (
         officeId is string &&
@@ -162,7 +166,16 @@ service cloud.firestore {
 
     // Assets inventory
     match /assets/{assetId} {
-      allow read: if canAccessScopedResource('assets.read', resource.data.officeId, resource.data.warehouseId);
+      // A scoped creator may check a fresh deterministic asset ID before create.
+      allow get: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() &&
+          ((!exists(/databases/$(database)/documents/assets/$(assetId)) && hasPermission('assets.create')) ||
+           (exists(/databases/$(database)/documents/assets/$(assetId)) &&
+            hasAnyPermission('assets.read', 'assets.create', 'assets.update') &&
+            hasAssignedScope(resource.data.officeId, resource.data.warehouseId))));
+      allow list: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasAnyPermission('assets.read', 'assets.update', 'assets.delete') &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
       allow create: if canAccessScopedResource('assets.create', request.resource.data.officeId, request.resource.data.warehouseId);
       allow update: if canAccessScopedResource('assets.update', resource.data.officeId, resource.data.warehouseId) &&
         canAccessScopedResource('assets.update', request.resource.data.officeId, request.resource.data.warehouseId);
@@ -217,7 +230,7 @@ service cloud.firestore {
     // Custody assignments: every scoped card carries its office/warehouse IDs.
     match /custody_cards/{cardId} {
       allow read: if isPrimaryController() || isLegacyItManager() ||
-        (isScopedAccessEnabled() && hasPermission('custody.read') &&
+        (isScopedAccessEnabled() && (hasPermission('custody.read') || hasPermission('custody.manage')) &&
           hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
       allow create: if isPrimaryController() || isLegacyItManager() ||
         (isScopedAccessEnabled() && hasPermission('custody.manage') &&
@@ -233,7 +246,7 @@ service cloud.firestore {
     // Maintenance requests inherit the same location scope as their asset.
     match /maintenance_records/{recordId} {
       allow read: if isPrimaryController() || isLegacyItManager() ||
-        (isScopedAccessEnabled() && hasPermission('maintenance.read') &&
+        (isScopedAccessEnabled() && (hasPermission('maintenance.read') || hasPermission('maintenance.manage')) &&
           hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
       allow create: if isPrimaryController() || isLegacyItManager() ||
         (isScopedAccessEnabled() && hasPermission('maintenance.manage') &&
@@ -248,7 +261,7 @@ service cloud.firestore {
     // Spare-parts stock is assigned to a warehouse, not globally visible.
     match /spare_parts/{partId} {
       allow read: if isPrimaryController() || isLegacyItManager() ||
-        (isScopedAccessEnabled() && hasPermission('spareparts.read') &&
+        (isScopedAccessEnabled() && (hasPermission('spareparts.read') || hasPermission('spareparts.manage')) &&
           hasAssignedScope('', resource.data.warehouseId));
       allow create: if isPrimaryController() || isLegacyItManager() ||
         (isScopedAccessEnabled() && hasPermission('spareparts.manage') &&
@@ -284,7 +297,7 @@ service cloud.firestore {
         (
           isScopedAccessEnabled() &&
           hasAssignedScope(resource.data.officeId, resource.data.warehouseId) &&
-          (hasPermission('assets.read') || hasPermission('custody.read') || hasPermission('maintenance.read'))
+          (hasPermission('assets.read') || hasPermission('assets.update') || hasPermission('custody.read') || hasPermission('custody.manage') || hasPermission('maintenance.read') || hasPermission('maintenance.manage'))
         );
       allow create: if isPrimaryController() || isLegacyItManager() ||
         (
