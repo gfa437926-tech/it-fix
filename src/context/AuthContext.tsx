@@ -121,6 +121,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // All other self-registered accounts start with the limited IT manager role.
             role: isControllerAccount ? 'admin' : 'it_manager',
             isActive: true,
+            // New non-controller accounts start locked to an empty scope until
+            // the primary controller assigns explicit permissions and locations.
+            accessControlEnabled: !isControllerAccount,
+            permissions: {},
+            officeIds: [],
+            warehouseIds: [],
             createdAt: new Date().toISOString(),
           };
 
