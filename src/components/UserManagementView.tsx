@@ -471,16 +471,13 @@ export const UserManagementView: React.FC = () => {
               </section>
             </div>
             <section className="border border-slate-200 rounded-xl p-4 mt-5">
-              <h4 className="font-bold text-sm text-[#183B56] mb-3">صلاحيات العمليات</h4>
+              <h4 className="font-bold text-sm text-[#183B56] mb-3">صلاحيات الأصول والمواقع والمستودعات</h4>
               <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
                 {([
                   ['assets.read', 'عرض الأصول'], ['assets.create', 'إضافة أصول'],
                   ['assets.update', 'تعديل الأصول'], ['assets.delete', 'حذف الأصول'],
                   ['offices.read', 'عرض المكاتب'], ['offices.manage', 'إدارة المكاتب'],
                   ['warehouses.read', 'عرض المستودعات'], ['warehouses.manage', 'إدارة المستودعات'],
-                  ['custody.read', 'عرض العهد'], ['custody.manage', 'إدارة العهد'],
-                  ['maintenance.read', 'عرض الصيانة'], ['maintenance.manage', 'إدارة الصيانة'],
-                  ['reports.read', 'عرض التقارير'], ['users.manage', 'إدارة المستخدمين'],
                 ] as [UserPermission, string][]).map(([key, label]) => (
                   <label key={key} className="flex items-center gap-2 text-xs p-2 rounded-lg bg-slate-50">
                     <input type="checkbox" checked={accessPermissions[key] === true} onChange={(e) => setAccessPermissions((old) => ({ ...old, [key]: e.target.checked }))} />
