@@ -103,6 +103,8 @@ export async function createMaintenanceRecord(
       const movement = doc(collection(db, 'asset_movements'));
       tx.set(movement, {
         assetId: ticket.assetId,
+        officeId: newRecord.officeId || '',
+        warehouseId: newRecord.warehouseId || '',
         assetLabel: newRecord.assetLabel,
         movementType: 'maintenance_opened',
         occurredAt: now,
@@ -165,8 +167,10 @@ export async function completeMaintenanceRecord(
 
       const movement = doc(collection(db, 'asset_movements'));
       tx.set(movement, {
-        assetId: record.assetId,
-        assetLabel: record.assetLabel,
+        assetId: data.assetId,
+        officeId: data.officeId || '',
+        warehouseId: data.warehouseId || '',
+        assetLabel: data.assetLabel,
         movementType: 'maintenance_completed',
         occurredAt: now,
         maintenanceId: record.id,
