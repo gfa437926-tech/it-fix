@@ -7,29 +7,39 @@ import {
   orderBy,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { MaintenanceRecord, MaintenancePriority } from '../types';
+import { MaintenanceRecord, MaintenancePriority, UserProfile } from '../types';
 
 export function watchMaintenanceRecords(
   onData: (records: MaintenanceRecord[]) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  scope?: UserProfile | null
 ) {
   const ref = collection(db, 'maintenance_records');
-  const q = query(ref, orderBy('reportedAt', 'desc'));
-
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const records = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      })) as MaintenanceRecord[];
-      onData(records);
-    },
-    (error) => {
-      handleFirestoreError(error, OperationType.GET, 'maintenance_records');
-      onError?.(error as Error);
-    }
-  );
+  if (scope?.accessControlEnabled === true) {
+    const groups: { field: 'officeId' | 'warehouseId'; ids: string[] }[] = [];
+    const offices = [...new Set(scope.officeIds || [])].filter(Boolean);
+    const warehouses = [...new Set(scope.warehouseIds || [])].filter(Boolean);
+    for (let i = 0; i < offices.length; i += 30) groups.push({ field: 'officeId', ids: offices.slice(i, i + 30) });
+    for (let i = 0; i < warehouses.length; i += 30) groups.push({ field: 'warehouseId', ids: warehouses.slice(i, i + 30) });
+    if (!groups.length) { onData([]); return () => undefined; }
+    const snapshots = new Map<string, Map<string, MaintenanceRecord>>();
+    const unsubs = groups.map(({ field, ids }) => onSnapshot(
+      query(ref, where(field, 'in', ids), orderBy('reportedAt', 'desc')),
+      (snapshot) => {
+        snapshots.set(field + ':' + ids.join(','), new Map(snapshot.docs.map((item) => [
+          item.id, { id: item.id, ...item.data() } as MaintenanceRecord,
+        ])));
+        const merged = new Map<string, MaintenanceRecord>();
+        snapshots.forEach((items) => items.forEach((record, id) => merged.set(id, record)));
+        onData([...merged.values()].sort((a, b) => b.reportedAt.localeCompare(a.reportedAt)));
+      },
+      (error) => { handleFirestoreError(error, OperationType.GET, 'maintenance_records'); onError?.(error as Error); }
+    ));
+    return () => unsubs.forEach((unsubscribe) => unsubscribe());
+  }
+  return onSnapshot(query(ref, orderBy('reportedAt', 'desc')), (snapshot) => {
+    onData(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as MaintenanceRecord[]);
+  }, (error) => { handleFirestoreError(error, OperationType.GET, 'maintenance_records'); onError?.(error as Error); });
 }
 
 export async function createMaintenanceRecord(
@@ -76,6 +86,8 @@ export async function createMaintenanceRecord(
         title,
         description,
         priority: ticket.priority,
+        officeId: assetData.officeId || '',
+        warehouseId: assetData.warehouseId || '',
         status: 'open',
         reportedAt: now,
         technician: ticket.technician?.trim() || '',
