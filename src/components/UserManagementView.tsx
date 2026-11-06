@@ -11,7 +11,7 @@ import {
   Mail,
   User as UserIcon,
 } from 'lucide-react';
-import { Office, UserPermission, UserProfile, Warehouse } from '../types';
+import { AccessProfile, ACCESS_PROFILE_LABELS, ACCESS_PROFILE_PRESETS, Office, UserPermission, UserProfile, Warehouse } from '../types';
 import { watchOffices } from '../services/officeService';
 import { saveWarehouse, watchWarehouses } from '../services/warehouseService';
 import {
@@ -29,6 +29,7 @@ export const UserManagementView: React.FC = () => {
   const [offices, setOffices] = useState<Office[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [accessTarget, setAccessTarget] = useState<UserProfile | null>(null);
+  const [accessProfile, setAccessProfile] = useState<AccessProfile>('custom');
   const [accessOfficeIds, setAccessOfficeIds] = useState<string[]>([]);
   const [accessWarehouseIds, setAccessWarehouseIds] = useState<string[]>([]);
   const [accessPermissions, setAccessPermissions] = useState<Partial<Record<UserPermission, boolean>>>({});
@@ -121,6 +122,7 @@ export const UserManagementView: React.FC = () => {
   const openAccessEditor = (target: UserProfile) => {
     if (!isPrimaryController) return;
     setAccessTarget(target);
+    setAccessProfile(target.accessProfile || 'custom');
     setAccessOfficeIds(target.officeIds || []);
     setAccessWarehouseIds(target.warehouseIds || []);
     setAccessPermissions(target.permissions || {});
@@ -153,6 +155,7 @@ export const UserManagementView: React.FC = () => {
       await updateUserAccessScope(accessTarget.uid, {
         officeIds: accessOfficeIds,
         warehouseIds: accessWarehouseIds,
+        accessProfile,
         permissions: accessPermissions,
       });
       setAccessTarget(null);
@@ -470,6 +473,25 @@ export const UserManagementView: React.FC = () => {
                 )}
               </section>
             </div>
+            <section className="border border-slate-200 rounded-xl p-4 mt-5">
+              <label className="block text-xs font-bold text-[#183B56] mb-2">الدور الوظيفي / قالب الصلاحيات</label>
+              <select
+                value={accessProfile}
+                onChange={(e) => {
+                  const next = e.target.value as AccessProfile;
+                  setAccessProfile(next);
+                  if (next !== 'custom') {
+                    setAccessPermissions(Object.fromEntries(ACCESS_PROFILE_PRESETS[next].map((permission) => [permission, true])));
+                  }
+                }}
+                className="w-full md:w-1/2 border border-slate-200 rounded-lg p-2 text-xs"
+              >
+                {Object.entries(ACCESS_PROFILE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-500 mt-2">القالب يحدد الصلاحيات الابتدائية فقط؛ يمكنك تعديل كل إذن يدوياً بعد اختياره.</p>
+            </section>
             <section className="border border-slate-200 rounded-xl p-4 mt-5">
               <h4 className="font-bold text-sm text-[#183B56] mb-3">صلاحيات الأصول والمواقع والمستودعات</h4>
               <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
