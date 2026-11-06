@@ -312,13 +312,13 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
       appliedSerials.add(normalizedSerial);
 
       try {
+        const matchedOffice = offices.find((office) => office.name.trim().toLowerCase() === row.officeName.trim().toLowerCase());
+        if (profile?.accessControlEnabled === true && !matchedOffice) {
+          throw new Error('المكتب الموجود في الملف غير موجود ضمن المكاتب المصرح بها للمستخدم');
+        }
         if (row.isExisting && row.existingAssetId) {
           // Update existing asset card
           const original = assets.find((a) => a.id === row.existingAssetId);
-          const matchedOffice = offices.find((office) => office.name.trim().toLowerCase() === row.officeName.trim().toLowerCase());
-          if (profile?.accessControlEnabled === true && !matchedOffice) {
-            throw new Error('المكتب الموجود في الملف غير موجود ضمن المكاتب المصرح بها للمستخدم');
-          }
           if (original) {
             await updateAsset({
               ...original,
