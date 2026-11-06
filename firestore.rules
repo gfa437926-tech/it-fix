@@ -176,40 +176,40 @@ service cloud.firestore {
 
     // Custody assignments
     match /custody_cards/{cardId} {
-      allow read: if isActiveUser();
+      allow read: if isActiveUser() && !isScopedAccessEnabled();
       allow create, update, delete: if isAdmin();
     }
 
     // Maintenance records and service history
     match /maintenance_records/{recordId} {
-      allow read: if isActiveUser();
+      allow read: if isActiveUser() && !isScopedAccessEnabled();
       allow create, update: if isAdmin();
       allow delete: if isAdmin();
     }
 
     // Spare parts catalog
     match /spare_parts/{partId} {
-      allow read: if isActiveUser();
+      allow read: if isActiveUser() && !isScopedAccessEnabled();
       allow create, update, delete: if isAdmin();
     }
 
     // Maintenance parts consumption events
     match /maintenance_parts/{usageId} {
-      allow read: if isActiveUser();
+      allow read: if isActiveUser() && !isScopedAccessEnabled();
       allow create: if isAdmin();
       allow update, delete: if false;
     }
 
     // Procurement invoices and warranties
     match /purchase_records/{purchaseId} {
-      allow read: if isActiveUser();
+      allow read: if isActiveUser() && !isScopedAccessEnabled();
       allow create, update: if isAdmin();
       allow delete: if isAdmin();
     }
 
     // Movements and audits timeline
     match /asset_movements/{movementId} {
-      allow read: if isActiveUser();
+      allow read: if isActiveUser() && !isScopedAccessEnabled();
       allow create: if isAdmin();
       allow update, delete: if false;
     }
@@ -234,7 +234,7 @@ service cloud.firestore {
 
     // Documents and attachment metadata
     match /asset_documents/{documentId} {
-      allow read: if isActiveUser();
+      allow read: if isActiveUser() && !isScopedAccessEnabled();
       allow create, update, delete: if isAdmin();
     }
 
