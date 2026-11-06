@@ -9,7 +9,7 @@ import {
   orderBy,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { UserPermission, UserProfile } from '../types';
+import { AccessProfile, ACCESS_PROFILE_PRESETS, UserPermission, UserProfile } from '../types';
 
 export function watchUsers(
   onData: (users: UserProfile[]) => void,
@@ -113,6 +113,7 @@ export async function updateUserAccessScope(
   access: {
     officeIds: string[];
     warehouseIds: string[];
+    accessProfile: AccessProfile;
     permissions: Partial<Record<UserPermission, boolean>>;
   }
 ) {
@@ -137,6 +138,7 @@ export async function updateUserAccessScope(
   try {
     await updateDoc(ref, {
       accessControlEnabled: true,
+      accessProfile: access.accessProfile,
       officeIds,
       warehouseIds,
       permissions,
