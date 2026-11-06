@@ -77,8 +77,8 @@ export const UserManagementView: React.FC = () => {
       setFormError('إنشاء المستخدمين متاح للمتحكم الأساسي فقط');
       return;
     }
-    if (!displayName.trim() || !email.trim()) {
-      setFormError('الاسم والبريد الإلكتروني مطلوبان');
+    if (!displayName.trim() || !email.trim() || !uid.trim()) {
+      setFormError('الاسم والبريد الإلكتروني ومعرف Firebase Authentication (UID) مطلوبة');
       return;
     }
 
@@ -86,9 +86,8 @@ export const UserManagementView: React.FC = () => {
     setFormError('');
 
     try {
-      const generatedUid = uid.trim() || `usr_${Date.now()}`;
       await createManualUser({
-        uid: generatedUid,
+        uid: uid.trim(),
         displayName: displayName.trim(),
         email: email.trim().toLowerCase(),
         role,
@@ -269,9 +268,9 @@ export const UserManagementView: React.FC = () => {
             >
               <X className="w-5 h-5" />
             </button>
-            <h3 className="text-xl font-bold text-[#183B56] mb-1">تسجيل مستخدم مصرح جديد</h3>
+            <h3 className="text-xl font-bold text-[#183B56] mb-1">إضافة ملف مستخدم</h3>
             <p className="text-xs text-slate-500 mb-4">
-              إضافة ملف مستخدم وتعيين الدور الوظيفي في لوحة التحكم
+              إنشاء ملف صلاحيات Firestore لمستخدم موجود مسبقاً في Firebase Authentication
             </p>
 
             {formError && (
@@ -319,16 +318,18 @@ export const UserManagementView: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  معرف الحساب (UID اختياري)
+                  معرف الحساب (UID من Firebase Authentication) *
                 </label>
                 <input
                   type="text"
                   value={uid}
                   onChange={(e) => setUid(e.target.value)}
-                  placeholder="اتركه فارغاً للتوليد التلقائي"
+                  placeholder="الصق UID للحساب المنشأ في Firebase Auth"
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none font-mono text-xs"
                 />
               </div>
+
+              <p className="rounded-lg bg-amber-50 border border-amber-200 p-2.5 text-[11px] leading-5 text-amber-800">هذا النموذج لا ينشئ حساب تسجيل الدخول أو كلمة المرور. أنشئ الحساب أولاً في Firebase Authentication ثم أدخل UID هنا.</p>
 
               <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
                 <button
