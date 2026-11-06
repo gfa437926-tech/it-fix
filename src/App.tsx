@@ -143,7 +143,7 @@ function MainApp() {
             console.error('Seed office err:', e);
           }
         }
-      })
+      }, undefined, profile)
     );
     unsubs.push(
       watchCustodyCards(async (data) => {
