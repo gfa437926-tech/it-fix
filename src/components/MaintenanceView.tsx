@@ -50,7 +50,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Modals
-  const [isOpenAddModal, setIsOpenAddModal] = useState(Boolean(initialAssetForMaintenance));
+  const [isOpenAddModal, setIsOpenAddModal] = useState(Boolean(initialAssetForMaintenance) && canManageMaintenance);
   const [selectedAssetId, setSelectedAssetId] = useState(initialAssetForMaintenance?.id || '');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
