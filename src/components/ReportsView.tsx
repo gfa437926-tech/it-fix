@@ -94,6 +94,17 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     .filter((item) => item.count > 0)
     .sort((a, b) => b.count - a.count);
   const maxCategoryCount = Math.max(1, ...categoryBreakdown.map((item) => item.count));
+  const officeBreakdown = Object.values(filteredAssets.reduce<Record<string, { name: string; count: number; available: number; assigned: number; maintenance: number }>>((groups, asset) => {
+    const key = asset.officeId || asset.officeName || 'warehouse';
+    const name = asset.officeName || (asset.officeId ? offices.find((office) => office.id === asset.officeId)?.name : '') || 'المستودع / غير محدد';
+    const group = groups[key] || (groups[key] = { name, count: 0, available: 0, assigned: 0, maintenance: 0 });
+    group.count += 1;
+    if (asset.status === 'available') group.available += 1;
+    if (asset.status === 'assigned') group.assigned += 1;
+    if (asset.status === 'maintenance') group.maintenance += 1;
+    return groups;
+  }, {})).sort((a, b) => b.count - a.count);
+  const maxOfficeCount = Math.max(1, ...officeBreakdown.map((item) => item.count));
 
   // Pre-generate QR codes for labels sheet when in QR mode
   useEffect(() => {
@@ -414,6 +425,54 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           )}
         </section>
       </div>
+
+      {/* Office comparison */}
+      <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <div>
+            <h3 className="font-black text-[#183B56]">مقارنة توزيع الأصول بين المكاتب</h3>
+            <p className="text-xs text-slate-400 mt-1">عدد الأصول وحالتها التشغيلية وفق نتائج التصفية الحالية</p>
+          </div>
+          <span className="text-xs font-bold text-slate-500">{officeBreakdown.length} موقع</span>
+        </div>
+        {officeBreakdown.length === 0 ? (
+          <p className="text-sm text-slate-400 text-center py-5">لا توجد بيانات للمقارنة</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="p-3 font-bold">المكتب / الموقع</th>
+                  <th className="p-3 font-bold">إجمالي الأصول</th>
+                  <th className="p-3 font-bold">متوفر</th>
+                  <th className="p-3 font-bold">في العهدة</th>
+                  <th className="p-3 font-bold">قيد الصيانة</th>
+                  <th className="p-3 font-bold min-w-36">الحصة من النتائج</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {officeBreakdown.map((item) => (
+                  <tr key={item.name}>
+                    <td className="p-3 font-bold text-slate-700">{item.name}</td>
+                    <td className="p-3 font-black text-[#183B56]">{item.count}</td>
+                    <td className="p-3 text-emerald-700 font-bold">{item.available}</td>
+                    <td className="p-3 text-blue-700 font-bold">{item.assigned}</td>
+                    <td className="p-3 text-amber-700 font-bold">{item.maintenance}</td>
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 flex-1 rounded-full bg-slate-100 overflow-hidden">
+                          <div className="h-full rounded-full bg-[#168C8C]" style={{ width: `${(item.count / maxOfficeCount) * 100}%` }} />
+                        </div>
+                        <span className="text-slate-500 w-9 text-left">{Math.round((item.count / Math.max(1, filteredAssets.length)) * 100)}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {/* Printable QR Code Labels Sheet View */}
       {printQrMode ? (
