@@ -277,18 +277,20 @@ export async function returnCustodyRecord(
     await runTransaction(db, async (tx) => {
       const cardSnap = await tx.get(cardRef);
       if (!cardSnap.exists()) throw new Error('بطاقة العهدة غير موجودة');
+      const data = cardSnap.data() as CustodyRecord;
+      if (data.status !== 'active') throw new Error('لا يمكن إرجاع عهدة مغلقة أو مُعادة مسبقاً');
+      if (data.approvalStatus !== 'approved') throw new Error('لا يمكن إرجاع عهدة لم يتم اعتمادها');
+      if (!data.assetId) throw new Error('بطاقة العهدة غير مرتبطة بمعرّف أصل');
+
+      const assetRef = doc(db, 'assets', data.assetId);
+      const assetSnap = await tx.get(assetRef);
+      if (!assetSnap.exists()) throw new Error('الأصل المرتبط بالعهدة غير موجود');
+      if (assetSnap.data().status !== 'assigned') {
+        throw new Error('حالة الأصل لا تشير إلى عهدة نشطة؛ راجع سجل الأصل قبل الإرجاع');
+      }
 
       const now = new Date().toISOString();
-
-      if (card.assetId) {
-        const assetRef = doc(db, 'assets', card.assetId);
-        const assetSnap = await tx.get(assetRef);
-        if (assetSnap.exists()) {
-          tx.update(assetRef, {
-            status: 'available',
-          });
-        }
-      }
+      tx.update(assetRef, { status: 'available' });
 
       tx.update(cardRef, {
         status: 'returned',
@@ -297,11 +299,11 @@ export async function returnCustodyRecord(
 
       const movement = doc(collection(db, 'asset_movements'));
       tx.set(movement, {
-        assetId: card.assetId || card.id,
-        assetLabel: card.assetLabel || 'بطاقة عهدة',
+        assetId: data.assetId,
+        assetLabel: data.assetLabel || 'بطاقة عهدة',
         movementType: 'returned',
-        fromEmployee: card.responsibleName || card.employeeName,
-        fromOffice: card.officeName,
+        fromEmployee: data.responsibleName || data.employeeName,
+        fromOffice: data.officeName,
         occurredAt: now,
         custodyId: card.id,
         notes: `إرجاع عهدة للمستودع بواسطة ${actorName || actorUid}`,
