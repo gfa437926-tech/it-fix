@@ -129,7 +129,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
     setPartError('');
 
     try {
-      await consumeSparePart(selectedPartId, consumingRecord.id, partQty, partNotes, actorName);
+      await consumeSparePart(selectedPartId, consumingRecord.id, partQty, partNotes, actorName, profile);
       setConsumingRecord(null);
       setSelectedPartId('');
       setPartQty(1);
