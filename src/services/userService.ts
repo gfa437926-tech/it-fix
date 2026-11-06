@@ -89,6 +89,11 @@ export async function createManualUser(user: {
         email,
         role: user.role,
         isActive: user.isActive,
+        // Newly provisioned accounts are least-privilege until explicitly scoped.
+        accessControlEnabled: true,
+        permissions: {},
+        officeIds: [],
+        warehouseIds: [],
         createdAt: now,
         updatedAt: now,
       });
