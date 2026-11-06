@@ -43,6 +43,12 @@ export async function createMaintenanceRecord(
   },
   actorName: string = ''
 ) {
+  const title = ticket.title.trim();
+  const description = ticket.description.trim();
+  if (!ticket.assetId.trim()) throw new Error('يجب تحديد الأصل قبل فتح طلب الصيانة');
+  if (!title) throw new Error('عنوان طلب الصيانة مطلوب');
+  if (!description) throw new Error('وصف العطل مطلوب');
+
   const recordId = doc(collection(db, 'maintenance_records')).id;
   const assetRef = doc(db, 'assets', ticket.assetId);
   const recordRef = doc(db, 'maintenance_records', recordId);
@@ -67,8 +73,8 @@ export async function createMaintenanceRecord(
         id: recordId,
         assetId: ticket.assetId,
         assetLabel: ticket.assetLabel || `${assetData.brand || ''} ${assetData.model || ''}`.trim(),
-        title: ticket.title.trim(),
-        description: ticket.description.trim(),
+        title,
+        description,
         priority: ticket.priority,
         status: 'open',
         reportedAt: now,
@@ -88,7 +94,7 @@ export async function createMaintenanceRecord(
         movementType: 'maintenance_opened',
         occurredAt: now,
         maintenanceId: recordId,
-        notes: `فتح طلب صيانة: ${ticket.title} (بواسطة ${actorName || 'المسؤول'})`,
+        notes: `فتح طلب صيانة: ${title} (بواسطة ${actorName || 'المسؤول'})`,
       });
     });
   } catch (error) {
@@ -102,6 +108,13 @@ export async function completeMaintenanceRecord(
   cost: number,
   actorName: string = ''
 ) {
+  const normalizedResolution = resolution.trim();
+  const normalizedCost = Number(cost);
+  if (!normalizedResolution) throw new Error('يجب إدخال وصف الحل قبل إغلاق الصيانة');
+  if (!Number.isFinite(normalizedCost) || normalizedCost < 0) {
+    throw new Error('تكلفة الصيانة يجب أن تكون رقماً صحيحاً غير سالب');
+  }
+
   const recordRef = doc(db, 'maintenance_records', record.id);
   const assetRef = doc(db, 'assets', record.assetId);
 
@@ -123,8 +136,8 @@ export async function completeMaintenanceRecord(
 
       tx.update(recordRef, {
         status: 'completed',
-        resolution: resolution.trim(),
-        cost: Number(cost) || 0,
+        resolution: normalizedResolution,
+        cost: normalizedCost,
         completedAt: now,
       });
 
@@ -138,8 +151,8 @@ export async function completeMaintenanceRecord(
         movementType: 'maintenance_completed',
         occurredAt: now,
         maintenanceId: record.id,
-        notes: `إكمال الصيانة: ${resolution.trim()} (بواسطة ${actorName || 'المسؤول'})`,
-        cost: Number(cost) || 0,
+        notes: `إكمال الصيانة: ${normalizedResolution} (بواسطة ${actorName || 'المسؤول'})`,
+        cost: normalizedCost,
       });
     });
   } catch (error) {
