@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import date, datetime
 from pathlib import Path
 
@@ -99,6 +100,41 @@ def export_management_report(session: Session, file_path: str | Path) -> int:
         select(AuditLog).order_by(AuditLog.occurred_at.desc()).limit(10000)
     ).all())
 
+    # Aggregate asset ownership and lifecycle costs by office.
+    # Assets without an office remain visible in a dedicated row.
+    office_metrics: dict[str, dict[str, float]] = defaultdict(lambda: {
+        "assets": 0, "assigned": 0, "maintenance": 0,
+        "purchase_cost": 0.0, "labor_cost": 0.0, "parts_cost": 0.0,
+    })
+    office_names = {office.id: office.name for office in offices}
+    asset_offices = {asset.id: asset.office_id for asset in assets}
+    for asset in assets:
+        key = asset.office_id or "__unassigned__"
+        office_metrics[key]["assets"] += 1
+        if asset.status == "assigned":
+            office_metrics[key]["assigned"] += 1
+        if asset.status == "maintenance":
+            office_metrics[key]["maintenance"] += 1
+    for purchase in purchases:
+        key = asset_offices.get(purchase.asset_id) or "__unassigned__"
+        office_metrics[key]["purchase_cost"] += float(purchase.total_cost or 0)
+    for ticket in maintenance:
+        key = asset_offices.get(ticket.asset_id) or "__unassigned__"
+        office_metrics[key]["labor_cost"] += float(ticket.cost or 0)
+        office_metrics[key]["parts_cost"] += float(ticket.parts_cost or 0)
+    office_analysis_rows = []
+    for key, values in sorted(
+        office_metrics.items(),
+        key=lambda item: office_names.get(item[0], "بدون مكتب محدد"),
+    ):
+        office_analysis_rows.append([
+            office_names.get(key, "بدون مكتب محدد"),
+            int(values["assets"]), int(values["assigned"]), int(values["maintenance"]),
+            round(values["purchase_cost"], 2), round(values["labor_cost"], 2),
+            round(values["parts_cost"], 2),
+            round(values["labor_cost"] + values["parts_cost"], 2),
+        ])
+
     workbook = Workbook()
     overview = workbook.active
     overview.title = "الملخص"
@@ -150,6 +186,15 @@ def export_management_report(session: Session, file_path: str | Path) -> int:
             office.phone or "", "فعال" if office.is_active else "غير فعال",
             office.notes or "",
         ] for office in offices],
+    )
+
+    _sheet(
+        workbook, "تحليل المكاتب",
+        ["المكتب", "عدد الأصول", "أصول في العهدة", "أصول قيد الصيانة",
+         "إجمالي المشتريات", "تكلفة أجور الصيانة", "تكلفة قطع الصيانة",
+         "إجمالي تكلفة الصيانة"],
+        office_analysis_rows,
+        [30, 16, 18, 20, 22, 24, 24, 24],
     )
 
     _sheet(
