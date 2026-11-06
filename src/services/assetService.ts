@@ -55,7 +55,7 @@ export function watchAssets(
       return () => undefined;
     }
 
-    const snapshots = new Map<string, Asset>();
+    const snapshots = new Map<string, Map<string, Asset>>();
     const unsubs = groups.map(({ field, ids }) =>
       onSnapshot(
         query(assetsRef, where(field, 'in', ids)),
@@ -66,12 +66,10 @@ export function watchAssets(
           for (const docSnap of snapshot.docs) {
             current.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Asset);
           }
-          snapshots.set(field + ':' + ids.join(','), current as unknown as Asset);
+          snapshots.set(field + ':' + ids.join(','), current);
           const merged = new Map<string, Asset>();
           for (const value of snapshots.values()) {
-            if (value instanceof Map) {
-              for (const [id, asset] of value.entries()) merged.set(id, asset);
-            }
+            for (const [id, asset] of value.entries()) merged.set(id, asset);
           }
           onData([...merged.values()].sort((a, b) => a.brand.localeCompare(b.brand)));
         },
