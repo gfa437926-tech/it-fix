@@ -52,6 +52,7 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
   const actorUid = user?.uid || '';
   const actorName = profile?.displayName || user?.email || 'المسؤول';
   const actorEmail = user?.email || '';
+  const canManageCustody = profile?.accessControlEnabled !== true || profile.permissions?.['custody.manage'] === true;
 
   // View presentation mode
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
@@ -62,7 +63,7 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
 
   // Card editor modal state
-  const [isEditorOpen, setIsEditorOpen] = useState(Boolean(initialAssetForCustody));
+  const [isEditorOpen, setIsEditorOpen] = useState(Boolean(initialAssetForCustody) && canManageCustody);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
 
   // Form Fields matching user's official form
@@ -344,8 +345,8 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
   const handleSaveCard = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!isPrimaryController) {
-      setFormError('عذراً، فقط المتحكم الأول المرتبط بحسابه مصرح له بإدخال أو تعديل البطاقات.');
+    if (!canManageCustody) {
+      setFormError('لا تملك صلاحية إدارة بطاقات العهد ضمن نطاقك الحالي.');
       return;
     }
 
@@ -568,7 +569,7 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
           </div>
 
           {/* Add New Card Button (Primary Controller Only) */}
-          {isPrimaryController ? (
+          {canManageCustody ? (
             <button
               onClick={handleOpenNewCard}
               className="flex items-center gap-2 px-4 py-2.5 bg-[#183B56] hover:bg-[#122c42] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
@@ -579,11 +580,11 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
           ) : (
             <button
               disabled
-              title="فقط المتحكم الأول بحسابه المرتبط يمكنه إدخال بطاقات جديدة"
+              title="لا تملك صلاحية إدارة بطاقات العهد ضمن نطاقك الحالي"
               className="flex items-center gap-2 px-4 py-2.5 bg-slate-300 text-slate-500 text-xs font-bold rounded-xl cursor-not-allowed opacity-75"
             >
               <Lock className="w-4 h-4" />
-              <span>إدخال بطاقة (مخصص للمتحكم)</span>
+              <span>إدخال بطاقة (غير مصرح)</span>
             </button>
           )}
         </div>
@@ -807,25 +808,23 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
                           >
                             <Printer className="w-3.5 h-3.5" />
                           </button>
+                          {canManageCustody && (
+                            <button
+                              onClick={() => handleEditCard(card)}
+                              title="تعديل البطاقة"
+                              className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           {isPrimaryController && (
-                            <>
-                              <button
-                                onClick={() => handleEditCard(card)}
-                                title="تعديل البطاقة"
-                                className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() =>
-                                  handleDeleteCard(card.id, card.responsibleName || card.employeeName)
-                                }
-                                title="حذف البطاقة"
-                                className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </>
+                            <button
+                              onClick={() => handleDeleteCard(card.id, card.responsibleName || card.employeeName)}
+                              title="حذف البطاقة"
+                              className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           )}
                         </div>
                       </td>
@@ -867,7 +866,7 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
                     >
                       <Printer className="w-4 h-4" />
                     </button>
-                    {isPrimaryController && (
+                    {canManageCustody && (
                       <button
                         onClick={() => handleEditCard(card)}
                         title="تعديل"
