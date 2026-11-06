@@ -2,7 +2,7 @@ import {
   collection,
   doc,
   onSnapshot,
-  setDoc,
+  runTransaction,
   updateDoc,
   deleteDoc,
   query,
@@ -65,13 +65,36 @@ export async function createManualUser(user: {
   role: 'admin' | 'it_manager';
   isActive: boolean;
 }) {
-  const ref = doc(db, 'users', user.uid);
+  const uid = user.uid.trim();
+  const displayName = user.displayName.trim();
+  const email = user.email.trim().toLowerCase();
+  if (!uid || !displayName || !email) {
+    throw new Error('UID والاسم والبريد الإلكتروني حقول مطلوبة');
+  }
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+    throw new Error('صيغة البريد الإلكتروني غير صحيحة');
+  }
+
+  const ref = doc(db, 'users', uid);
   try {
-    await setDoc(ref, {
-      ...user,
-      createdAt: new Date().toISOString(),
+    await runTransaction(db, async (transaction) => {
+      const existing = await transaction.get(ref);
+      if (existing.exists()) {
+        throw new Error('يوجد ملف مستخدم بهذا UID بالفعل؛ لم يتم استبدال بياناته');
+      }
+      const now = new Date().toISOString();
+      transaction.set(ref, {
+        uid,
+        displayName,
+        email,
+        role: user.role,
+        isActive: user.isActive,
+        createdAt: now,
+        updatedAt: now,
+      });
     });
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
+    if (error instanceof Error && error.message.includes('يوجد ملف مستخدم')) throw error;
+    handleFirestoreError(error, OperationType.WRITE, `users/${uid}`);
   }
 }
