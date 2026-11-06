@@ -30,9 +30,11 @@ import {
   MaintenanceRecord,
   SparePart,
   AssetMovement,
+  Warehouse,
 } from './types';
 import { watchAssets } from './services/assetService';
 import { watchOffices, saveOffice } from './services/officeService';
+import { watchWarehouses } from './services/warehouseService';
 import { watchCustodyCards, saveOfficialCustodyCard } from './services/custodyService';
 import { watchMaintenanceRecords } from './services/maintenanceService';
 import { watchSpareParts, addSparePart } from './services/sparePartsService';
@@ -73,6 +75,7 @@ function MainApp() {
   // Real-time collections
   const [assets, setAssets] = useState<Asset[]>([]);
   const [offices, setOffices] = useState<Office[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [custodyCards, setCustodyCards] = useState<CustodyRecord[]>([]);
   const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>([]);
   const [spareParts, setSpareParts] = useState<SparePart[]>([]);
@@ -113,6 +116,7 @@ function MainApp() {
     unsubs.push(
       watchOffices(async (data) => {
         setOffices(data);
+    unsubs.push(watchWarehouses((data) => setWarehouses(data), undefined, profile));
         // Seed default offices if completely empty
         if (import.meta.env.DEV && data.length === 0) {
           try {
@@ -351,6 +355,7 @@ function MainApp() {
               custodyCards={custodyCards}
               spareParts={spareParts}
               maintenanceRecords={maintenanceRecords}
+              warehouses={warehouses}
               onNavigate={(tab) => setCurrentTab(tab)}
               onOpenAddAsset={() => setCurrentTab('assets')}
               onOpenAddCustody={() => setCurrentTab('custody')}
