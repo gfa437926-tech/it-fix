@@ -326,7 +326,19 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
 
   // Execute Upsert: Add new cards + Update existing cards
   const handleApplyChanges = async (mode: 'all' | 'new_only' | 'updates_only') => {
-    if (rows.length === 0) return;
+    if (rows.length === 0 || isProcessing) return;
+
+    const selectedRows = rows.filter((row) =>
+      mode === 'all' ||
+      (mode === 'new_only' && !row.isExisting) ||
+      (mode === 'updates_only' && row.isExisting)
+    );
+    const validSelectedRows = selectedRows.filter((row) => !row.error);
+    if (validSelectedRows.length === 0) {
+      setErrorMsg('لا توجد سجلات صالحة للتطبيق ضمن الخيار المحدد. صحح الأخطاء أو اختر نوعاً آخر من العمليات.');
+      return;
+    }
+
     setIsProcessing(true);
     setErrorMsg('');
 
@@ -336,15 +348,12 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
     const errors: string[] = [];
     const appliedSerials = new Set<string>();
 
-    for (const row of rows) {
+    for (const row of selectedRows) {
       if (row.error) {
         failed++;
+        errors.push(`السطر ${row.rowIndex}: ${row.error}`);
         continue;
       }
-
-      // Filter by execution mode
-      if (mode === 'new_only' && row.isExisting) continue;
-      if (mode === 'updates_only' && !row.isExisting) continue;
 
       // Revalidate editable preview values immediately before writing.
       const normalizedSerial = row.serialNumber.trim().toUpperCase();
