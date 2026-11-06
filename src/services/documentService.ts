@@ -8,6 +8,7 @@ import {
   orderBy,
   where,
   getDoc,
+  QueryConstraint,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, handleFirestoreError, OperationType } from '../firebase';
@@ -29,7 +30,7 @@ export function watchAssetDocuments(
     if (!groups.length) { onData?.([]); return () => undefined; }
     const snapshots = new Map<string, Map<string, AssetDocument>>();
     const unsubs = groups.map(({ field, ids }) => {
-      const constraints = [where(field, 'in', ids)];
+      const constraints: QueryConstraint[] = [where(field, 'in', ids)];
       if (assetId) constraints.push(where('assetId', '==', assetId));
       constraints.push(orderBy('createdAt', 'desc'));
       return onSnapshot(
