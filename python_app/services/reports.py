@@ -123,7 +123,14 @@ def export_management_report(
         select(AuditLog).order_by(AuditLog.occurred_at.desc()).limit(10000)
     ).all())
 
-    if date_from or date_to:\n        movements = [row for row in movements if in_range(row.occurred_at)]\n        custody_cards = [row for row in custody_cards if in_range(row.created_at)]\n        maintenance = [row for row in maintenance if in_range(row.reported_at)]\n        usages = [row for row in usages if in_range(row.used_at)]\n        purchases = [row for row in purchases if in_range(row.purchase_date)]\n        documents = [row for row in documents if in_range(row.created_at)]\n        audits = [row for row in audits if in_range(row.occurred_at)]\n\n    # Aggregate asset ownership and lifecycle costs by office.
+    if date_from or date_to:
+        movements = [row for row in movements if in_range(row.occurred_at)]
+        custody_cards = [row for row in custody_cards if in_range(row.created_at)]
+        maintenance = [row for row in maintenance if in_range(row.reported_at)]
+        usages = [row for row in usages if in_range(row.used_at)]
+        purchases = [row for row in purchases if in_range(row.purchase_date)]
+        documents = [row for row in documents if in_range(row.created_at)]
+        audits = [row for row in audits if in_range(row.occurred_at)]\n\n    # Aggregate asset ownership and lifecycle costs by office.
     # Assets without an office remain visible in a dedicated row.
     office_metrics: dict[str, dict[str, float]] = defaultdict(lambda: {
         "assets": 0, "assigned": 0, "maintenance": 0,
