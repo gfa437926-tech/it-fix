@@ -355,7 +355,6 @@ function MainApp() {
               custodyCards={custodyCards}
               spareParts={spareParts}
               maintenanceRecords={maintenanceRecords}
-              warehouses={warehouses}
               onNavigate={(tab) => setCurrentTab(tab)}
               onOpenAddAsset={() => setCurrentTab('assets')}
               onOpenAddCustody={() => setCurrentTab('custody')}
@@ -424,6 +423,7 @@ function MainApp() {
             <SparePartsView
               spareParts={spareParts}
               maintenanceRecords={maintenanceRecords}
+              warehouses={warehouses}
             />
           )}
 
