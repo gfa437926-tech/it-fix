@@ -267,9 +267,24 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
     value: string
   ) => {
     setRows((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: value };
-      return updated;
+      const updated = prev.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, [field]: value } : row
+      );
+      const firstRowBySerial = new Map<string, number>();
+      return updated.map((row) => {
+        const serial = row.serialNumber.trim().toUpperCase();
+        let error = '';
+        if (!row.brand.trim() || !row.model.trim()) {
+          error = 'اسم الشركة والموديل مطلوبان';
+        } else if (!serial) {
+          error = 'الرقم التسلسلي مطلوب';
+        } else if (firstRowBySerial.has(serial)) {
+          error = `الرقم التسلسلي مكرر داخل الملف (ظهر أولاً في السطر ${firstRowBySerial.get(serial)})`;
+        } else {
+          firstRowBySerial.set(serial, row.rowIndex);
+        }
+        return { ...row, serialNumber: serial, error };
+      });
     });
   };
 
