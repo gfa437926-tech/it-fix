@@ -25,7 +25,7 @@ import {
   ASSET_CATEGORY_LABELS,
   ASSET_STATUS_LABELS,
 } from '../types';
-import { createAsset, updateAsset, transferAsset, retireAsset } from '../services/assetService';
+import { createAsset, updateAsset, transferAsset, retireAsset, recordInventoryCheck } from '../services/assetService';
 import { useAuth } from '../context/AuthContext';
 
 interface AssetsViewProps {
@@ -71,6 +71,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
   const [scannedInput, setScannedInput] = useState('');
   const [scannedAssetResult, setScannedAssetResult] = useState<Asset | null>(null);
   const [auditSuccessMsg, setAuditSuccessMsg] = useState('');
+  const [auditSaving, setAuditSaving] = useState(false);
 
   const handleScanQuery = (queryVal: string) => {
     setScannedInput(queryVal);
@@ -975,15 +976,29 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
 
                       <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
                         <button
-                          onClick={() => {
-                            setAuditSuccessMsg(
-                              `تم تأكيد جرد الأصل (${scannedAssetResult.brand} ${scannedAssetResult.model}) بنجاح في الموقع الحالي.`
-                            );
-                            setTimeout(() => setAuditSuccessMsg(''), 4000);
+                          onClick={async () => {
+                            if (!profile?.uid || auditSaving) return;
+                            setAuditSaving(true);
+                            setAuditSuccessMsg('');
+                            try {
+                              await recordInventoryCheck(scannedAssetResult, {
+                                uid: profile.uid,
+                                name: actorName,
+                                email: profile.email,
+                              });
+                              setAuditSuccessMsg(
+                                `تم حفظ عملية جرد (${scannedAssetResult.brand} ${scannedAssetResult.model}) في سجل الجرد بتاريخ ${new Date().toLocaleString('ar')}`
+                              );
+                            } catch (error) {
+                              alert(error instanceof Error ? error.message : 'تعذر حفظ عملية الجرد');
+                            } finally {
+                              setAuditSaving(false);
+                            }
                           }}
-                          className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer"
+                          disabled={auditSaving || !profile?.uid}
+                          className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50"
                         >
-                          تأكيد الجرد والتحقق
+                          {auditSaving ? 'جاري حفظ الجرد...' : 'تأكيد الجرد والتحقق'}
                         </button>
                         <button
                           onClick={() => {
