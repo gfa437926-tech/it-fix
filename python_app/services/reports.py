@@ -162,6 +162,12 @@ def export_management_report(
     overview = workbook.active
     overview.title = "الملخص"
     overview.append(["المؤشر", "القيمة"])
+    period_label = (
+        f"{date_from.isoformat() if date_from else 'بداية غير محددة'} — "
+        f"{date_to.isoformat() if date_to else 'نهاية غير محددة'}"
+    )
+    overview.append(["فترة التقرير", period_label])
+    overview.append(["ملاحظة", "الأصول والمكاتب لقطة حالية؛ السجلات التشغيلية المؤرخة ضمن الفترة المحددة."])
     metrics = [
         ("إجمالي الأصول", summary.total_assets),
         ("متوفر أو معاد للمستودع", summary.available),
