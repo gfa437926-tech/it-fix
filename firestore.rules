@@ -165,7 +165,7 @@ service cloud.firestore {
       allow read: if isPrimaryController() || isLegacyItManager() ||
         (isScopedAccessEnabled() &&
           (hasPermission('offices.read') || hasPermission('offices.manage') ||
-           hasPermission('assets.read') || hasPermission('custody.read') || hasPermission('custody.manage') ||
+           hasPermission('assets.read') || hasPermission('assets.create') || hasPermission('custody.read') || hasPermission('custody.manage') ||
            hasPermission('maintenance.read') || hasPermission('maintenance.manage')) &&
           ((resource.data.id is string && userDoc().officeIds is list && resource.data.id in userDoc().officeIds) ||
            (resource.data.warehouseId is string && userDoc().warehouseIds is list && resource.data.warehouseId in userDoc().warehouseIds)));
@@ -180,7 +180,7 @@ service cloud.firestore {
       allow read: if isPrimaryController() || isLegacyItManager() ||
         (isScopedAccessEnabled() &&
           (hasPermission('warehouses.read') || hasPermission('warehouses.manage') ||
-           hasPermission('assets.read') || hasPermission('spareparts.read') || hasPermission('spareparts.manage') ||
+           hasPermission('assets.read') || hasPermission('assets.create') || hasPermission('spareparts.read') || hasPermission('spareparts.manage') ||
            hasPermission('custody.read') || hasPermission('custody.manage') ||
            hasPermission('maintenance.read') || hasPermission('maintenance.manage')) &&
           resource.data.id is string && userDoc().warehouseIds is list && resource.data.id in userDoc().warehouseIds);
@@ -197,7 +197,7 @@ service cloud.firestore {
             (hasAnyPermission('assets.read', 'assets.create', 'assets.update') || hasPermission('custody.manage') || hasPermission('maintenance.manage')) &&
             hasAssignedScope(resource.data.officeId, resource.data.warehouseId))));
       allow list: if isPrimaryController() || isLegacyItManager() ||
-        (isScopedAccessEnabled() && hasAnyPermission('assets.read', 'assets.update', 'assets.delete') &&
+        (isScopedAccessEnabled() && (hasAnyPermission('assets.read', 'assets.create', 'assets.update') || hasPermission('assets.delete')) &&
           hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
       allow create: if canAccessScopedResource('assets.create', request.resource.data.officeId, request.resource.data.warehouseId);
       allow update: if canUpdateAssetWithinScope();
