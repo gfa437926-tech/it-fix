@@ -136,6 +136,13 @@ export async function consumeSparePart(
         throw new Error(`الكمية المتاحة (${available}) غير كافية لصرف (${quantity})`);
       }
 
+      if (part.warehouseId && ticket.warehouseId && part.warehouseId !== ticket.warehouseId) {
+        throw new Error('قطعة الغيار وطلب الصيانة يتبعان مستودعين مختلفين');
+      }
+      if (!part.warehouseId || !ticket.warehouseId || part.warehouseId !== ticket.warehouseId) {
+        throw new Error('يجب ربط قطعة الغيار وطلب الصيانة بالمستودع نفسه قبل الصرف');
+      }
+
       const unitCost = Number(part.unitCost) || 0;
       const totalCost = unitCost * quantity;
       const now = new Date().toISOString();
