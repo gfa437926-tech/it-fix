@@ -13,7 +13,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { Asset, AssetCategory, ASSET_CATEGORY_LABELS, ASSET_STATUS_LABELS } from '../types';
+import { Asset, AssetCategory, AssetStatus, ASSET_CATEGORY_LABELS, ASSET_STATUS_LABELS } from '../types';
 import { parseCSV } from '../services/importService';
 import { createAsset, updateAsset } from '../services/assetService';
 import { useAuth } from '../context/AuthContext';
@@ -27,7 +27,7 @@ interface EditableImportRow {
   model: string;
   serialNumber: string;
   officeName: string;
-  status: string;
+  status: AssetStatus;
   cpu: string;
   ram: string;
   storage: string;
@@ -197,7 +197,16 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
         'المستودع الرئيسي'
       ).trim();
 
-      const status = (raw.status || raw['الحالة'] || 'available').trim();
+      const statusRaw = (raw.status || raw['الحالة'] || 'available').trim().toLowerCase();
+      const statusAliases: Record<string, AssetStatus> = {
+        available: 'available', 'متوفر': 'available',
+        assigned: 'assigned', 'موزع': 'assigned', 'موزع في عهدة': 'assigned',
+        maintenance: 'maintenance', 'صيانة': 'maintenance', 'قيد الصيانة': 'maintenance',
+        damaged: 'damaged', 'تالف': 'damaged',
+        retired: 'retired', 'مستبعد': 'retired',
+        returned: 'returned', 'معاد': 'returned', 'معاد للمستودع': 'returned',
+      };
+      const status = statusAliases[statusRaw];
       const cpu = (raw.cpu || raw['المعالج'] || '').trim();
       const ram = (raw.ram || raw['الذاكرة'] || '').trim();
       const storage = (raw.storage || raw['التخزين'] || '').trim();
@@ -207,7 +216,7 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
         error = 'اسم الشركة والموديل مطلوبان';
       } else if (!serialNumber) {
         error = 'الرقم التسلسلي مطلوب';
-      } else if (firstRowBySerial.has(serialNumber)) {
+      } else if (!status) {\n        error = 'حالة الأصل غير صحيحة؛ استخدم حالة معتمدة من النموذج';\n      } else if (firstRowBySerial.has(serialNumber)) {
         error = `الرقم التسلسلي مكرر داخل الملف (ظهر أولاً في السطر ${firstRowBySerial.get(serialNumber)})`;
       } else {
         firstRowBySerial.set(serialNumber, rowIndex);
@@ -339,6 +348,7 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
               cpu: row.cpu || undefined,
               ram: row.ram || undefined,
               storage: row.storage || undefined,
+              status: row.status,
             });
             updated++;
           }
@@ -351,7 +361,7 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
               model: row.model,
               serialNumber: row.serialNumber,
               officeName: row.officeName || 'المستودع الرئيسي',
-              status: 'available',
+              status: row.status,
               cpu: row.cpu || undefined,
               ram: row.ram || undefined,
               storage: row.storage || undefined,
