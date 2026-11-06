@@ -10,18 +10,20 @@ import {
   DollarSign,
   TrendingDown,
 } from 'lucide-react';
-import { SparePart, MaintenanceRecord } from '../types';
+import { SparePart, MaintenanceRecord, Warehouse } from '../types';
 import { addSparePart, consumeSparePart } from '../services/sparePartsService';
 import { useAuth } from '../context/AuthContext';
 
 interface SparePartsViewProps {
   spareParts: SparePart[];
   maintenanceRecords: MaintenanceRecord[];
+  warehouses: Warehouse[];
 }
 
 export const SparePartsView: React.FC<SparePartsViewProps> = ({
   spareParts,
   maintenanceRecords,
+  warehouses,
 }) => {
   const { profile } = useAuth();
   const actorName = profile?.displayName || 'المسؤول';
@@ -37,6 +39,7 @@ export const SparePartsView: React.FC<SparePartsViewProps> = ({
   const [minQty, setMinQty] = useState<number>(3);
   const [unitCost, setUnitCost] = useState<number>(0);
   const [supplier, setSupplier] = useState('');
+  const [warehouseId, setWarehouseId] = useState(profile?.warehouseIds?.[0] || '');
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
 
@@ -69,7 +72,7 @@ export const SparePartsView: React.FC<SparePartsViewProps> = ({
         minimumQuantity: Number(minQty) || 0,
         unitCost: Number(unitCost) || 0,
         supplier: supplier.trim(),
-        warehouseId: profile?.warehouseIds?.[0] || '',
+        warehouseId: warehouseId || profile?.warehouseIds?.[0] || '',
       });
 
       setIsAddOpen(false);
@@ -79,6 +82,7 @@ export const SparePartsView: React.FC<SparePartsViewProps> = ({
       setMinQty(3);
       setUnitCost(0);
       setSupplier('');
+      setWarehouseId(profile?.warehouseIds?.[0] || '');
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : 'تعذر إضافة قطعة الغيار');
     } finally {
@@ -358,6 +362,18 @@ export const SparePartsView: React.FC<SparePartsViewProps> = ({
                 </div>
               </div>
 
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">المستودع</label>
+                <select
+                  value={warehouseId || profile?.warehouseIds?.[0] || ''}
+                  onChange={(e) => setWarehouseId(e.target.value)}
+                  required={profile?.accessControlEnabled === true}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                >
+                  <option value="">اختر المستودع</option>
+                  {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
+                </select>
+              </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">المورد المعتمد</label>
                 <input
