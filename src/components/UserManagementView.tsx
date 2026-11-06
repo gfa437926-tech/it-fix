@@ -21,7 +21,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 export const UserManagementView: React.FC = () => {
-  const { user: currentAuthUser } = useAuth();
+  const { user: currentAuthUser, isAdmin } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [search, setSearch] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -191,7 +191,7 @@ export const UserManagementView: React.FC = () => {
                           }
                           className="text-xs font-bold py-1.5 px-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none disabled:opacity-75 cursor-pointer"
                         >
-                          <option value="admin">مدير نظام (Admin)</option>
+                          {isAdmin && <option value="admin">مدير نظام (Admin)</option>}
                           <option value="it_manager">مسؤول تقنية (IT Manager)</option>
                         </select>
                       </td>
@@ -285,7 +285,7 @@ export const UserManagementView: React.FC = () => {
                   onChange={(e) => setRole(e.target.value as 'admin' | 'it_manager')}
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none text-xs font-semibold"
                 >
-                  <option value="admin">مدير نظام (كامل الصلاحيات)</option>
+                  {isAdmin && <option value="admin">مدير نظام (كامل الصلاحيات)</option>}
                   <option value="it_manager">مسؤول تقنية (إدارة الأصول والعهد والصيانة)</option>
                 </select>
               </div>
