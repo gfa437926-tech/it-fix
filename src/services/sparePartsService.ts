@@ -108,7 +108,8 @@ export async function consumeSparePart(
   maintenanceId: string,
   quantity: number,
   notes: string = '',
-  actorName: string = ''
+  actorName: string = '',
+  scope?: UserProfile | null
 ) {
   if (quantity <= 0) throw new Error('الكمية المصروفة يجب أن تكون أكبر من صفر');
 
@@ -136,11 +137,9 @@ export async function consumeSparePart(
         throw new Error(`الكمية المتاحة (${available}) غير كافية لصرف (${quantity})`);
       }
 
-      if (part.warehouseId && ticket.warehouseId && part.warehouseId !== ticket.warehouseId) {
-        throw new Error('قطعة الغيار وطلب الصيانة يتبعان مستودعين مختلفين');
-      }
-      if (!part.warehouseId || !ticket.warehouseId || part.warehouseId !== ticket.warehouseId) {
-        throw new Error('يجب ربط قطعة الغيار وطلب الصيانة بالمستودع نفسه قبل الصرف');
+      if (scope?.accessControlEnabled === true &&
+        (!part.warehouseId || !ticket.warehouseId || part.warehouseId !== ticket.warehouseId)) {
+        throw new Error('قطعة الغيار وطلب الصيانة يجب أن يتبعا المستودع المصرح نفسه');
       }
 
       const unitCost = Number(part.unitCost) || 0;
