@@ -150,6 +150,8 @@ export const AssetDocumentsView: React.FC<AssetDocumentsViewProps> = ({ assets }
         </div>
       </div>
 
+      {!canReadDocuments && <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3">ليس لديك صلاحية عرض أرشيف المستندات ضمن نطاقك الحالي.</p>}
+
       {/* Documents Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {filtered.length === 0 ? (
