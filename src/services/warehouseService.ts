@@ -1,12 +1,42 @@
-import { collection, doc, onSnapshot, query, orderBy, setDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, orderBy, setDoc, where } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { Warehouse } from '../types';
+import { UserProfile, Warehouse } from '../types';
 
 export function watchWarehouses(
   onData: (warehouses: Warehouse[]) => void,
-  onError?: (error: Error) => void
+  onError?: (error: Error) => void,
+  scope?: UserProfile | null
 ) {
   const ref = collection(db, 'warehouses');
+  if (scope?.accessControlEnabled === true) {
+    const ids = [...new Set(scope.warehouseIds || [])].filter(Boolean);
+    if (!ids.length) {
+      onData([]);
+      return () => undefined;
+    }
+    const unsubs: (() => void)[] = [];
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
+    const snapshots = new Map<string, Warehouse[]>();
+    chunks.forEach((chunk, index) => {
+      unsubs.push(onSnapshot(
+        query(ref, where('id', 'in', chunk)),
+        (snapshot) => {
+          snapshots.set(String(index), snapshot.docs.map((item) => ({
+            id: item.id,
+            ...item.data(),
+          })) as Warehouse[]);
+          onData([...snapshots.values()].flat().sort((a, b) => a.name.localeCompare(b.name)));
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, 'warehouses');
+          onError?.(error as Error);
+        }
+      ));
+    });
+    return () => unsubs.forEach((unsubscribe) => unsubscribe());
+  }
+
   return onSnapshot(
     query(ref, orderBy('name', 'asc')),
     (snapshot) => onData(snapshot.docs.map((item) => ({
