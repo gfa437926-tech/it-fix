@@ -52,6 +52,8 @@ export interface Asset {
   storage?: string;
   officeId?: string;
   officeName?: string;
+  warehouseId?: string;
+  warehouseName?: string;
   receivedAt?: string;
   retiredAt?: string;
   retirementReason?: string;
@@ -64,6 +66,7 @@ export interface Office {
   building?: string;
   directorate?: string;
   department?: string;
+  warehouseId?: string;
   room?: string;
   manager?: string;
   phone?: string;
@@ -294,12 +297,34 @@ export interface ImportBatch {
   rowErrors: string[];
 }
 
+export type UserPermission =
+  | 'assets.read' | 'assets.create' | 'assets.update' | 'assets.delete'
+  | 'offices.read' | 'offices.manage'
+  | 'warehouses.read' | 'warehouses.manage'
+  | 'custody.read' | 'custody.manage'
+  | 'maintenance.read' | 'maintenance.manage'
+  | 'reports.read' | 'users.manage';
+
+export interface Warehouse {
+  id: string;
+  name: string;
+  code?: string;
+  officeIds?: string[];
+  isActive: boolean;
+  notes?: string;
+}
+
 export interface UserProfile {
   uid: string;
   displayName: string;
   email: string;
   role: 'admin' | 'it_manager';
   isActive: boolean;
+  // When enabled, Firestore rules require explicit permissions and assigned scope.
+  accessControlEnabled?: boolean;
+  permissions?: Partial<Record<UserPermission, boolean>>;
+  officeIds?: string[];
+  warehouseIds?: string[];
   createdAt: string;
   updatedAt?: string;
 }
