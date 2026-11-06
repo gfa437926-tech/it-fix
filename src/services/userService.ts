@@ -130,7 +130,7 @@ export async function updateUserAccessScope(
         'assets.read', 'assets.create', 'assets.update', 'assets.delete',
         'offices.read', 'offices.manage', 'warehouses.read', 'warehouses.manage',
         'custody.read', 'custody.manage', 'maintenance.read', 'maintenance.manage',
-        'spareparts.read', 'spareparts.manage', 'reports.read', 'users.manage',
+        'spareparts.read', 'spareparts.manage', 'documents.read', 'documents.manage', 'reports.read', 'users.manage',
       ].includes(key)
     )
   );
