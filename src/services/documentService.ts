@@ -2,7 +2,6 @@ import {
   collection,
   doc,
   onSnapshot,
-  setDoc,
   deleteDoc,
   query,
   orderBy,
@@ -71,7 +70,6 @@ export async function uploadAssetDocument(
   try {
     const assetSnap = await getDoc(doc(db, 'assets', assetId));
     if (!assetSnap.exists()) throw new Error('الأصل المرتبط بالمستند غير موجود');
-    const assetData = assetSnap.data();
     try {
       const storageRef = ref(storage, storagePath);
       const snapshot = await uploadBytes(storageRef, file, {
