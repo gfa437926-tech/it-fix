@@ -26,6 +26,8 @@ interface AssetDocumentsViewProps {
 export const AssetDocumentsView: React.FC<AssetDocumentsViewProps> = ({ assets }) => {
   const { profile, user } = useAuth();
   const actorName = profile?.displayName || user?.email || 'المسؤول';
+  const canReadDocuments = profile?.accessControlEnabled !== true || profile.permissions?.['documents.read'] === true || profile.permissions?.['documents.manage'] === true;
+  const canManageDocuments = profile?.accessControlEnabled !== true || profile.permissions?.['documents.manage'] === true;
 
   const [documents, setDocuments] = useState<AssetDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +46,7 @@ export const AssetDocumentsView: React.FC<AssetDocumentsViewProps> = ({ assets }
     const unsub = watchAssetDocuments(undefined, (docs) => {
       setDocuments(docs);
       setLoading(false);
-    }, undefined, profile);
+    }, () => setLoading(false), profile);
     return () => unsub();
   }, [profile]);
 
@@ -104,7 +106,7 @@ export const AssetDocumentsView: React.FC<AssetDocumentsViewProps> = ({ assets }
           </p>
         </div>
 
-        <button
+        {canManageDocuments && <button
           onClick={() => {
             setSelectedAssetId(assets[0]?.id || '');
             setSelectedFile(null);
@@ -115,7 +117,7 @@ export const AssetDocumentsView: React.FC<AssetDocumentsViewProps> = ({ assets }
         >
           <Upload className="w-4 h-4" />
           <span>رفع مستند جديد</span>
-        </button>
+        </button>}
       </div>
 
       {/* Filter Bar */}
@@ -204,13 +206,13 @@ export const AssetDocumentsView: React.FC<AssetDocumentsViewProps> = ({ assets }
                         <ExternalLink className="w-4 h-4" />
                       </a>
                     )}
-                    <button
+                    {canManageDocuments && <button
                       onClick={() => handleDelete(docItem.id, docItem.fileName)}
                       className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
                       title="حذف المستند"
                     >
                       <Trash2 className="w-4 h-4" />
-                    </button>
+                    </button>}
                   </div>
                 </div>
               </div>
