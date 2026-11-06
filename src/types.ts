@@ -280,6 +280,8 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
 export interface AssetDocument {
   id: string;
   assetId: string;
+  officeId?: string;
+  warehouseId?: string;
   purchaseRecordId?: string;
   fileName: string;
   documentType: DocumentType;
@@ -313,6 +315,7 @@ export type UserPermission =
   | 'custody.read' | 'custody.manage'
   | 'maintenance.read' | 'maintenance.manage'
   | 'spareparts.read' | 'spareparts.manage'
+  | 'documents.read' | 'documents.manage'
   | 'reports.read' | 'users.manage';
 
 export interface Warehouse {
@@ -350,9 +353,9 @@ export const ACCESS_PROFILE_PRESETS: Record<Exclude<AccessProfile, 'custom'>, Us
   warehouse_manager: ['assets.read', 'warehouses.read', 'warehouses.manage', 'offices.read', 'spareparts.read', 'spareparts.manage', 'reports.read'],
   office_manager: ['assets.read', 'offices.read', 'offices.manage', 'warehouses.read', 'reports.read'],
   custody_officer: ['assets.read', 'custody.read', 'custody.manage', 'reports.read'],
-  maintenance_technician: ['assets.read', 'maintenance.read', 'maintenance.manage', 'spareparts.read', 'spareparts.manage', 'reports.read'],
-  auditor: ['assets.read', 'offices.read', 'warehouses.read', 'custody.read', 'maintenance.read', 'spareparts.read', 'reports.read'],
-  viewer: ['assets.read', 'offices.read', 'warehouses.read', 'custody.read', 'maintenance.read', 'spareparts.read', 'reports.read'],
+  maintenance_technician: ['assets.read', 'maintenance.read', 'maintenance.manage', 'spareparts.read', 'spareparts.manage', 'documents.read', 'documents.manage', 'reports.read'],
+  auditor: ['assets.read', 'offices.read', 'warehouses.read', 'custody.read', 'maintenance.read', 'spareparts.read', 'documents.read', 'reports.read'],
+  viewer: ['assets.read', 'offices.read', 'warehouses.read', 'custody.read', 'maintenance.read', 'spareparts.read', 'documents.read'],
 };
 
 export interface UserProfile {
