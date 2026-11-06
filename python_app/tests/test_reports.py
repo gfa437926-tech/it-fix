@@ -179,6 +179,8 @@ def test_management_report_filters_dated_records_and_validates_range(tmp_path: P
             }
             assert overview_rows["فترة التقرير"] == "2026-01-01 — 2026-12-31"
             assert "لقطة حالية" in overview_rows["ملاحظة"]
+            assert overview_rows["إجمالي قيمة المشتريات ضمن الفترة"] == 200
+            assert overview_rows["إجمالي تكلفة الصيانة ضمن الفترة"] == 0
         finally:
             workbook.close()
         with pytest.raises(ValueError, match="تاريخ البداية"):
