@@ -269,7 +269,7 @@ function MainApp() {
         }
       })
     );
-    unsubs.push(watchAssetMovements(100, (data) => setMovements(data)));
+    unsubs.push(watchAssetMovements(100, (data) => setMovements(data), undefined, profile));
 
     return () => {
       unsubs.forEach((u) => u());
