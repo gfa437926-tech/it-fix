@@ -171,7 +171,33 @@ service cloud.firestore {
 
     // Unique serial number reservations
     match /asset_serials/{serialId} {
-      allow read, create, update, delete: if isAdmin();
+      // A scoped asset creator may check one deterministic serial reservation,
+      // but cannot enumerate reservations belonging to other offices.
+      allow get: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && (hasPermission('assets.read') || hasPermission('assets.create') || hasPermission('assets.update')));
+      allow list: if isPrimaryController() || isLegacyItManager();
+      allow create, update: if isPrimaryController() || isLegacyItManager() ||
+        (
+          isScopedAccessEnabled() &&
+          (hasPermission('assets.create') || hasPermission('assets.update')) &&
+          request.resource.data.assetId is string &&
+          existsAfter(/databases/$(database)/documents/assets/$(request.resource.data.assetId)) &&
+          hasAssignedScope(
+            getAfter(/databases/$(database)/documents/assets/$(request.resource.data.assetId)).data.officeId,
+            getAfter(/databases/$(database)/documents/assets/$(request.resource.data.assetId)).data.warehouseId
+          )
+        );
+      allow delete: if isPrimaryController() || isLegacyItManager() ||
+        (
+          isScopedAccessEnabled() &&
+          hasPermission('assets.update') &&
+          resource.data.assetId is string &&
+          exists(/databases/$(database)/documents/assets/$(resource.data.assetId)) &&
+          hasAssignedScope(
+            get(/databases/$(database)/documents/assets/$(resource.data.assetId)).data.officeId,
+            get(/databases/$(database)/documents/assets/$(resource.data.assetId)).data.warehouseId
+          )
+        );
     }
 
     // Custody assignments
