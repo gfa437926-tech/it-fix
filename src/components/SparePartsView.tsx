@@ -96,7 +96,8 @@ export const SparePartsView: React.FC<SparePartsViewProps> = ({
         selectedTicketId,
         consumeQty,
         consumeNotes,
-        actorName
+        actorName,
+        profile
       );
       setConsumingPart(null);
       setSelectedTicketId('');
