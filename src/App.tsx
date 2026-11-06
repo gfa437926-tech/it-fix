@@ -232,7 +232,7 @@ function MainApp() {
         }
       })
     );
-    unsubs.push(watchMaintenanceRecords((data) => setMaintenanceRecords(data)));
+    unsubs.push(watchMaintenanceRecords((data) => setMaintenanceRecords(data), undefined, profile));
     unsubs.push(
       watchSpareParts(async (data) => {
         setSpareParts(data);
