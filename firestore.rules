@@ -260,7 +260,13 @@ service cloud.firestore {
 
     // Spare-parts stock is assigned to a warehouse, not globally visible.
     match /spare_parts/{partId} {
-      allow read: if isPrimaryController() || isLegacyItManager() ||
+      allow get: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() &&
+          ((!exists(/databases/$(database)/documents/spare_parts/$(partId)) && hasPermission('spareparts.manage')) ||
+           (exists(/databases/$(database)/documents/spare_parts/$(partId)) &&
+            (hasPermission('spareparts.read') || hasPermission('spareparts.manage')) &&
+            hasAssignedScope('', resource.data.warehouseId))));
+      allow list: if isPrimaryController() || isLegacyItManager() ||
         (isScopedAccessEnabled() && (hasPermission('spareparts.read') || hasPermission('spareparts.manage')) &&
           hasAssignedScope('', resource.data.warehouseId));
       allow create: if isPrimaryController() || isLegacyItManager() ||
