@@ -61,6 +61,20 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     });
   }, [assets, categoryFilter, statusFilter, officeFilter, dateFrom, dateTo, dateRangeValid]);
 
+  // Maintenance indicators use the same selected period, based on ticket opening date.
+  const filteredMaintenance = useMemo(() => {
+    if (!dateRangeValid) return [];
+    return maintenanceRecords.filter((record) => {
+      const openedDate = record.reportedAt?.slice(0, 10) || '';
+      return (!dateFrom || (openedDate !== '' && openedDate >= dateFrom)) &&
+        (!dateTo || (openedDate !== '' && openedDate <= dateTo));
+    });
+  }, [maintenanceRecords, dateFrom, dateTo, dateRangeValid]);
+
+  const maintenanceLaborCost = filteredMaintenance.reduce((sum, record) => sum + (Number(record.cost) || 0), 0);
+  const maintenancePartsCost = filteredMaintenance.reduce((sum, record) => sum + (Number(record.partsCost) || 0), 0);
+  const completedMaintenance = filteredMaintenance.filter((record) => record.status === 'completed').length;
+
   // Pre-generate QR codes for labels sheet when in QR mode
   useEffect(() => {
     if (!printQrMode) return;
@@ -281,6 +295,30 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         <span className="text-xs font-bold text-slate-400 mr-auto">
           {dateRangeValid ? `نتائج التقرير: ${filteredAssets.length} أصل` : 'الفترة غير صحيحة: تاريخ البداية بعد تاريخ النهاية'}
         </span>
+      </div>
+
+      {/* Maintenance summary for the selected reporting period */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+          <p className="text-xs font-bold text-slate-500">تذاكر الصيانة ضمن الفترة</p>
+          <p className="text-2xl font-black text-[#183B56] mt-2">{filteredMaintenance.length}</p>
+          <p className="text-[11px] text-slate-400 mt-1">حسب تاريخ فتح التذكرة</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+          <p className="text-xs font-bold text-slate-500">التذاكر المكتملة</p>
+          <p className="text-2xl font-black text-emerald-700 mt-2">{completedMaintenance}</p>
+          <p className="text-[11px] text-slate-400 mt-1">من إجمالي تذاكر الفترة</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+          <p className="text-xs font-bold text-slate-500">تكلفة أعمال الصيانة</p>
+          <p className="text-2xl font-black text-amber-700 mt-2">{maintenanceLaborCost.toLocaleString('ar-EG')}</p>
+          <p className="text-[11px] text-slate-400 mt-1">تكلفة العمل المسجلة</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+          <p className="text-xs font-bold text-slate-500">تكلفة قطع الصيانة</p>
+          <p className="text-2xl font-black text-indigo-700 mt-2">{maintenancePartsCost.toLocaleString('ar-EG')}</p>
+          <p className="text-[11px] text-slate-400 mt-1">قيمة القطع المسجلة في التذاكر</p>
+        </div>
       </div>
 
       {/* Printable QR Code Labels Sheet View */}
