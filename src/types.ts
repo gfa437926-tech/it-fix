@@ -328,6 +328,7 @@ export type AccessProfile =
   | 'custom'
   | 'asset_operator'
   | 'warehouse_manager'
+  | 'office_manager'
   | 'custody_officer'
   | 'maintenance_technician'
   | 'auditor'
@@ -337,6 +338,7 @@ export const ACCESS_PROFILE_LABELS: Record<AccessProfile, string> = {
   custom: 'تخصيص يدوي',
   asset_operator: 'مسؤول الأصول',
   warehouse_manager: 'مسؤول المستودع',
+  office_manager: 'مسؤول المكتب',
   custody_officer: 'مسؤول العهد',
   maintenance_technician: 'فني الصيانة',
   auditor: 'مدقق',
@@ -346,6 +348,7 @@ export const ACCESS_PROFILE_LABELS: Record<AccessProfile, string> = {
 export const ACCESS_PROFILE_PRESETS: Record<Exclude<AccessProfile, 'custom'>, UserPermission[]> = {
   asset_operator: ['assets.read', 'assets.create', 'assets.update', 'reports.read'],
   warehouse_manager: ['assets.read', 'warehouses.read', 'warehouses.manage', 'offices.read', 'spareparts.read', 'spareparts.manage', 'reports.read'],
+  office_manager: ['assets.read', 'offices.read', 'offices.manage', 'warehouses.read', 'reports.read'],
   custody_officer: ['assets.read', 'custody.read', 'custody.manage', 'reports.read'],
   maintenance_technician: ['assets.read', 'maintenance.read', 'maintenance.manage', 'spareparts.read', 'spareparts.manage', 'reports.read'],
   auditor: ['assets.read', 'offices.read', 'warehouses.read', 'custody.read', 'maintenance.read', 'spareparts.read', 'reports.read'],
