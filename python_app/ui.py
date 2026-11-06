@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import tkinter as tk
 import webbrowser
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Any
 
@@ -1205,6 +1205,32 @@ class AssetInventoryApp:
         if self.user.role != "admin":
             messagebox.showerror("غير مسموح", "إنشاء التقرير الشامل يتطلب صلاحية مدير النظام.", parent=self.root)
             return
+        start_text = simpledialog.askstring(
+            "تصفية التقرير",
+            "تاريخ البداية (YYYY-MM-DD) — اتركه فارغاً لعرض كل الفترات:",
+            parent=self.root,
+        )
+        if start_text is None:
+            return
+        end_text = simpledialog.askstring(
+            "تصفية التقرير",
+            "تاريخ النهاية (YYYY-MM-DD) — اتركه فارغاً لعرض كل الفترات:",
+            parent=self.root,
+        )
+        if end_text is None:
+            return
+        try:
+            date_from = date.fromisoformat(start_text.strip()) if start_text.strip() else None
+            date_to = date.fromisoformat(end_text.strip()) if end_text.strip() else None
+            if date_from and date_to and date_from > date_to:
+                raise ValueError("تاريخ البداية يجب ألا يتجاوز تاريخ النهاية.")
+        except ValueError as exc:
+            messagebox.showerror(
+                "تاريخ غير صحيح",
+                f"أدخل التاريخ بصيغة YYYY-MM-DD.\\n{exc}",
+                parent=self.root,
+            )
+            return
         destination = filedialog.asksaveasfilename(
             parent=self.root,
             title="حفظ التقرير الشامل",
@@ -1217,7 +1243,9 @@ class AssetInventoryApp:
         try:
             with SessionLocal() as session:
                 require_active_admin(session, self.user)
-                sheets = export_management_report(session, destination)
+                sheets = export_management_report(
+                    session, destination, date_from=date_from, date_to=date_to
+                )
             self.report_status.set(
                 f"اكتمل التقرير بنجاح: {sheets} ورقة عمل. تم حفظ الملف في: {destination}"
             )
