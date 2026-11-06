@@ -230,6 +230,23 @@ export async function transferAsset(
   const officeRef = doc(db, 'offices', destination.id);
 
   try {
+    // Firestore transactions cannot execute collection queries. Fetch the
+    // narrowly scoped candidate set first, then re-read every candidate by
+    // document reference inside the transaction before applying any writes.
+    const fromOfficeId = asset.officeId || '';
+    const linkedDocumentsQuery = query(
+      collection(db, 'asset_documents'),
+      where('assetId', '==', asset.id),
+      where('officeId', '==', fromOfficeId)
+    );
+    const linkedDocumentsCandidates = await getDocs(linkedDocumentsQuery);
+
+    // Leave room for the asset, movement and office reads under Firestore's
+    // per-transaction write ceiling; fail safely rather than partially moving.
+    if (linkedDocumentsCandidates.size > 450) {
+      throw new Error('عدد وثائق الأصل كبير جداً لنقلها دفعة واحدة؛ يرجى تقسيم العملية أو مراجعة الدعم');
+    }
+
     await runTransaction(db, async (tx) => {
       const assetSnap = await tx.get(assetRef);
       const officeSnap = await tx.get(officeRef);
@@ -239,16 +256,15 @@ export async function transferAsset(
         throw new Error('المكتب الوجهة غير موجود أو غير فعال');
       }
 
-      const fromOfficeId = assetSnap.data().officeId || '';
-      // Constrain the document query to the asset's current office. Besides
-      // reducing the read set, this lets Firestore prove the caller's scoped
-      // read access instead of issuing an unbounded assetId-only query.
-      const linkedDocumentsQuery = query(
-        collection(db, 'asset_documents'),
-        where('assetId', '==', asset.id),
-        where('officeId', '==', fromOfficeId)
-      );
-      const linkedDocumentsSnap = await tx.get(linkedDocumentsQuery);
+      const currentOfficeId = assetSnap.data().officeId || '';
+      if (currentOfficeId !== fromOfficeId) {
+        throw new Error('تغير موقع الأصل أثناء تنفيذ النقل؛ حدّث الصفحة ثم أعد المحاولة');
+      }
+
+      const linkedDocumentSnapshots = [];
+      for (const candidate of linkedDocumentsCandidates.docs) {
+        linkedDocumentSnapshots.push(await tx.get(candidate.ref));
+      }
 
       const currentStatus = assetSnap.data().status as AssetStatus;
       if (currentStatus !== 'available' && currentStatus !== 'returned') {
@@ -270,11 +286,17 @@ export async function transferAsset(
         transferredAt: now,
       });
 
-      linkedDocumentsSnap.docs.forEach((documentSnap) => {
-        tx.update(documentSnap.ref, {
-          officeId: destination.id,
-          warehouseId: destination.warehouseId || '',
-        });
+      linkedDocumentSnapshots.forEach((documentSnap) => {
+        if (
+          documentSnap.exists() &&
+          documentSnap.data().assetId === asset.id &&
+          (documentSnap.data().officeId || '') === fromOfficeId
+        ) {
+          tx.update(documentSnap.ref, {
+            officeId: destination.id,
+            warehouseId: destination.warehouseId || '',
+          });
+        }
       });
 
       const movementRef = doc(collection(db, 'asset_movements'));
