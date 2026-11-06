@@ -5,6 +5,7 @@ import {
   runTransaction,
   query,
   orderBy,
+  where,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { MaintenanceRecord, MaintenancePriority, UserProfile } from '../types';
