@@ -137,12 +137,22 @@ export async function updateAsset(asset: Asset) {
         }
       }
 
+      // Read the previous reservation before writes; remove it only if it still
+      // belongs to this asset, so a stale/corrupt index cannot erase another
+      // asset's serial reservation.
+      let mayDeleteOldReservation = false;
+      if (serialChanged && oldSerialRef) {
+        const oldSerialSnap = await tx.get(oldSerialRef);
+        mayDeleteOldReservation =
+          oldSerialSnap.exists() && oldSerialSnap.data().assetId === asset.id;
+      }
+
       tx.update(assetRef, {
         ...asset,
         serialNumber: serial,
       });
 
-      if (serialChanged && oldSerialRef) {
+      if (mayDeleteOldReservation && oldSerialRef) {
         tx.delete(oldSerialRef);
       }
 
