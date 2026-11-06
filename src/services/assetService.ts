@@ -233,6 +233,14 @@ export async function transferAsset(
     await runTransaction(db, async (tx) => {
       const assetSnap = await tx.get(assetRef);
       const officeSnap = await tx.get(officeRef);
+      // Read every linked document before writing: its office/warehouse scope
+      // must move atomically with the asset so scoped users at the destination
+      // do not lose access to its existing paperwork.
+      const linkedDocumentsQuery = query(
+        collection(db, 'asset_documents'),
+        where('assetId', '==', asset.id)
+      );
+      const linkedDocumentsSnap = await tx.get(linkedDocumentsQuery);
 
       if (!assetSnap.exists()) throw new Error('الجهاز غير موجود');
       if (!officeSnap.exists() || !officeSnap.data().isActive) {
@@ -258,6 +266,13 @@ export async function transferAsset(
         warehouseId: destination.warehouseId || '',
         officeName: destination.name,
         transferredAt: now,
+      });
+
+      linkedDocumentsSnap.docs.forEach((documentSnap) => {
+        tx.update(documentSnap.ref, {
+          officeId: destination.id,
+          warehouseId: destination.warehouseId || '',
+        });
       });
 
       const movementRef = doc(collection(db, 'asset_movements'));
