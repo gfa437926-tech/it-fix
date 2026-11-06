@@ -13,7 +13,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { Asset, AssetCategory, ASSET_CATEGORY_LABELS, ASSET_STATUS_LABELS } from '../types';
+import { Asset, AssetCategory, ASSET_CATEGORY_LABELS, ASSET_STATUS_LABELS, Office } from '../types';
 import { parseCSV } from '../services/importService';
 import { createAsset, updateAsset } from '../services/assetService';
 import { useAuth } from '../context/AuthContext';
@@ -37,11 +37,13 @@ interface EditableImportRow {
 
 interface AssetImportViewProps {
   assets: Asset[];
+  offices: Office[];
   onImportComplete?: () => void;
 }
 
 export const AssetImportView: React.FC<AssetImportViewProps> = ({
   assets,
+  offices,
   onImportComplete,
 }) => {
   const { profile, user } = useAuth();
@@ -313,6 +315,10 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
         if (row.isExisting && row.existingAssetId) {
           // Update existing asset card
           const original = assets.find((a) => a.id === row.existingAssetId);
+          const matchedOffice = offices.find((office) => office.name.trim().toLowerCase() === row.officeName.trim().toLowerCase());
+          if (profile?.accessControlEnabled === true && !matchedOffice) {
+            throw new Error('المكتب الموجود في الملف غير موجود ضمن المكاتب المصرح بها للمستخدم');
+          }
           if (original) {
             await updateAsset({
               ...original,
@@ -321,6 +327,8 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
               category: row.category,
               serialNumber: row.serialNumber,
               officeName: row.officeName,
+              officeId: matchedOffice?.id || original.officeId,
+              warehouseId: matchedOffice?.warehouseId || original.warehouseId,
               cpu: row.cpu || undefined,
               ram: row.ram || undefined,
               storage: row.storage || undefined,
@@ -336,6 +344,8 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
               model: row.model,
               serialNumber: row.serialNumber,
               officeName: row.officeName || 'المستودع الرئيسي',
+              officeId: matchedOffice?.id || '',
+              warehouseId: matchedOffice?.warehouseId || '',
               status: 'available',
               cpu: row.cpu || undefined,
               ram: row.ram || undefined,
