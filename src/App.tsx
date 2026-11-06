@@ -109,7 +109,7 @@ function MainApp() {
 
     const unsubs: (() => void)[] = [];
 
-    unsubs.push(watchAssets((data) => setAssets(data)));
+    unsubs.push(watchAssets((data) => setAssets(data), undefined, profile));
     unsubs.push(
       watchOffices(async (data) => {
         setOffices(data);
