@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   BarChart3,
   Download,
@@ -40,17 +40,26 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [officeFilter, setOfficeFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const [printQrMode, setPrintQrMode] = useState(false);
   const [qrCodesMap, setQrCodesMap] = useState<Record<string, string>>({});
 
-  // Filtered Assets for report
-  const filteredAssets = assets.filter((asset) => {
-    const matchesCat = categoryFilter === 'all' || asset.category === categoryFilter;
-    const matchesStatus = statusFilter === 'all' || asset.status === statusFilter;
-    const matchesOffice = officeFilter === 'all' || asset.officeId === officeFilter;
-    return matchesCat && matchesStatus && matchesOffice;
-  });
+  // Keep the filtered collection stable so QR generation does not restart on every render.
+  const dateRangeValid = !dateFrom || !dateTo || dateFrom <= dateTo;
+  const filteredAssets = useMemo(() => {
+    if (!dateRangeValid) return [];
+    return assets.filter((asset) => {
+      const receivedDate = asset.receivedAt?.slice(0, 10) || '';
+      const matchesCat = categoryFilter === 'all' || asset.category === categoryFilter;
+      const matchesStatus = statusFilter === 'all' || asset.status === statusFilter;
+      const matchesOffice = officeFilter === 'all' || asset.officeId === officeFilter;
+      const matchesFrom = !dateFrom || (receivedDate !== '' && receivedDate >= dateFrom);
+      const matchesTo = !dateTo || (receivedDate !== '' && receivedDate <= dateTo);
+      return matchesCat && matchesStatus && matchesOffice && matchesFrom && matchesTo;
+    });
+  }, [assets, categoryFilter, statusFilter, officeFilter, dateFrom, dateTo, dateRangeValid]);
 
   // Pre-generate QR codes for labels sheet when in QR mode
   useEffect(() => {
@@ -238,8 +247,39 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           ))}
         </select>
 
+        {/* Received date range */}
+        <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+          <span>من تاريخ الاستلام</span>
+          <input
+            type="date"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="text-xs py-2 px-2 bg-slate-50 border border-slate-200 rounded-xl"
+          />
+        </label>
+        <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+          <span>إلى تاريخ الاستلام</span>
+          <input
+            type="date"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="text-xs py-2 px-2 bg-slate-50 border border-slate-200 rounded-xl"
+          />
+        </label>
+        {(dateFrom || dateTo) && (
+          <button
+            type="button"
+            onClick={() => { setDateFrom(''); setDateTo(''); }}
+            className="text-xs font-bold text-[#168C8C] hover:underline"
+          >
+            مسح الفترة
+          </button>
+        )}
+
         <span className="text-xs font-bold text-slate-400 mr-auto">
-          نتائج التقرير: {filteredAssets.length} أصل
+          {dateRangeValid ? `نتائج التقرير: ${filteredAssets.length} أصل` : 'الفترة غير صحيحة: تاريخ البداية بعد تاريخ النهاية'}
         </span>
       </div>
 
@@ -299,6 +339,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             <p className="text-sm font-bold text-slate-600 mt-1">تقرير جرد الأصول الشامل والمفصل</p>
             <div className="flex items-center justify-between text-xs text-slate-500 mt-3 pt-2 border-t border-slate-100">
               <span>تاريخ التقرير: {new Date().toLocaleDateString('ar-EG')}</span>
+              <span>الفترة: {dateFrom || 'بداية السجل'} — {dateTo || 'حتى اليوم'}</span>
               <span>عدد الأصول المشمولة: {filteredAssets.length} جهاز</span>
             </div>
           </div>
