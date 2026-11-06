@@ -579,6 +579,7 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
                     <th className="py-2.5 px-3">الموديل</th>
                     <th className="py-2.5 px-3">التصنيف</th>
                     <th className="py-2.5 px-3">المكتب / الموقع</th>
+                    <th className="py-2.5 px-3">حالة الأصل</th>
                     <th className="py-2.5 px-3">المواصفات (CPU / RAM / Disk)</th>
                     <th className="py-2.5 px-3">التغييرات المكتشفة</th>
                   </tr>
@@ -667,6 +668,20 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
                           onChange={(e) => handleCellChange(idx, 'officeName', e.target.value)}
                           className="bg-transparent border border-transparent hover:border-slate-300 focus:border-[#168C8C] focus:bg-white rounded px-1.5 py-0.5 w-32 text-xs"
                         />
+                      </td>
+
+                      {/* Asset status */}
+                      <td className="py-2.5 px-3">
+                        <select
+                          value={row.status}
+                          onChange={(e) => handleCellChange(idx, 'status', e.target.value as AssetStatus)}
+                          className="bg-transparent border border-transparent hover:border-slate-300 focus:border-[#168C8C] focus:bg-white rounded px-1.5 py-1 text-xs font-semibold"
+                          aria-label={`حالة الأصل في السطر ${row.rowIndex}`}
+                        >
+                          {Object.entries(ASSET_STATUS_LABELS).map(([key, meta]) => (
+                            <option key={key} value={key}>{meta.label}</option>
+                          ))}
+                        </select>
                       </td>
 
                       {/* Specs */}
