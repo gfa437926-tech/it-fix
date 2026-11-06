@@ -425,6 +425,9 @@ def create_spare_part(
     name, sku = name.strip(), sku.strip().upper()
     if not name or not sku:
         raise ValueError("اسم قطعة الغيار ورمزها مطلوبان.")
+    numeric_values = (quantity, minimum_quantity, unit_cost)
+    if not all(math.isfinite(value) for value in numeric_values):
+        raise ValueError("المخزون والحد الأدنى والتكلفة يجب أن تكون أرقاماً محددة.")
     if quantity < 0 or minimum_quantity < 0 or unit_cost < 0:
         raise ValueError("المخزون والحد الأدنى والتكلفة لا يمكن أن تكون سالبة.")
     try:
