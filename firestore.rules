@@ -35,7 +35,15 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSuperAdmin() || (isActiveUser() && userDoc().role == 'it_manager');
+      // Scoped IT managers must never inherit global admin access from their role.
+      // The legacy fallback exists only for accounts not yet migrated by the controller.
+      return isSuperAdmin() ||
+        (
+          isActiveUser() &&
+          userDoc().role == 'it_manager' &&
+          (!userDoc().keys().hasAny(['accessControlEnabled']) ||
+            userDoc().accessControlEnabled != true)
+        );
     }
 
     // Legacy IT managers remain compatible until the controller explicitly
