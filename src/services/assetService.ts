@@ -261,10 +261,9 @@ export async function transferAsset(
         throw new Error('تغير موقع الأصل أثناء تنفيذ النقل؛ حدّث الصفحة ثم أعد المحاولة');
       }
 
-      const linkedDocumentSnapshots = [];
-      for (const candidate of linkedDocumentsCandidates.docs) {
-        linkedDocumentSnapshots.push(await tx.get(candidate.ref));
-      }
+      const linkedDocumentSnapshots = await Promise.all(
+        linkedDocumentsCandidates.docs.map((candidate) => tx.get(candidate.ref))
+      );
 
       const currentStatus = assetSnap.data().status as AssetStatus;
       if (currentStatus !== 'available' && currentStatus !== 'returned') {
