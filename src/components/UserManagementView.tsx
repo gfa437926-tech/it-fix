@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Office, UserPermission, UserProfile, Warehouse } from '../types';
 import { watchOffices } from '../services/officeService';
-import { watchWarehouses } from '../services/warehouseService';
+import { saveWarehouse, watchWarehouses } from '../services/warehouseService';
 import {
   watchUsers,
   updateUserRole,
@@ -33,6 +33,9 @@ export const UserManagementView: React.FC = () => {
   const [accessWarehouseIds, setAccessWarehouseIds] = useState<string[]>([]);
   const [accessPermissions, setAccessPermissions] = useState<Partial<Record<UserPermission, boolean>>>({});
   const [accessSaving, setAccessSaving] = useState(false);
+  const [newWarehouseName, setNewWarehouseName] = useState('');
+  const [newWarehouseCode, setNewWarehouseCode] = useState('');
+  const [warehouseSaving, setWarehouseSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'it_manager'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -121,6 +124,26 @@ export const UserManagementView: React.FC = () => {
     setAccessOfficeIds(target.officeIds || []);
     setAccessWarehouseIds(target.warehouseIds || []);
     setAccessPermissions(target.permissions || {});
+  };
+
+  const handleCreateWarehouse = async () => {
+    if (!isPrimaryController || !newWarehouseName.trim()) return;
+    setWarehouseSaving(true);
+    try {
+      await saveWarehouse({
+        name: newWarehouseName.trim(),
+        code: newWarehouseCode.trim(),
+        officeIds: [],
+        isActive: true,
+      });
+      setNewWarehouseName('');
+      setNewWarehouseCode('');
+      alert('تم إنشاء المستودع. أصبح متاحاً للإسناد ضمن نطاق المستخدمين.');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'تعذر إنشاء المستودع');
+    } finally {
+      setWarehouseSaving(false);
+    }
   };
 
   const saveAccess = async () => {
@@ -433,6 +456,18 @@ export const UserManagementView: React.FC = () => {
                   ))}
                   {warehouses.length === 0 && <p className="text-xs text-slate-400">لا توجد مستودعات مسجلة حالياً؛ أضفها قبل إسنادها للمستخدم.</p>}
                 </div>
+                {isPrimaryController && (
+                  <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
+                    <p className="text-[11px] font-bold text-slate-600">إضافة مستودع جديد</p>
+                    <input value={newWarehouseName} onChange={(e) => setNewWarehouseName(e.target.value)} placeholder="اسم المستودع" className="w-full border border-slate-200 rounded-lg p-2 text-xs" />
+                    <div className="flex gap-2">
+                      <input value={newWarehouseCode} onChange={(e) => setNewWarehouseCode(e.target.value)} placeholder="رمز اختياري" className="min-w-0 flex-1 border border-slate-200 rounded-lg p-2 text-xs" />
+                      <button type="button" onClick={handleCreateWarehouse} disabled={warehouseSaving || !newWarehouseName.trim()} className="px-3 py-2 rounded-lg bg-slate-800 text-white text-xs font-bold disabled:opacity-50">
+                        {warehouseSaving ? 'جارٍ الحفظ' : 'إضافة'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </section>
             </div>
             <section className="border border-slate-200 rounded-xl p-4 mt-5">
