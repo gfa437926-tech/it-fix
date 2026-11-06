@@ -25,10 +25,10 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return signedIn() && (
-        request.auth.token.email == 'gfa437926@gmail.com' ||
-        (userExists() && userDoc().role == 'admin')
-      );
+      // Keep elevated account administration bound to the immutable controller UID.
+      // A profile role alone must never grant privilege to promote or disable users.
+      return isPrimaryController() ||
+        (signedIn() && request.auth.token.email == 'gfa437926@gmail.com');
     }
 
     function isActiveUser() {
