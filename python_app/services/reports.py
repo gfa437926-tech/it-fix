@@ -71,8 +71,31 @@ def _sheet(
     _format_sheet(sheet, widths)
 
 
-def export_management_report(session: Session, file_path: str | Path) -> int:
-    """Export a read-only snapshot of the operational asset-management data."""
+def export_management_report(
+    session: Session,
+    file_path: str | Path,
+    *,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> int:
+    """Export operational data, optionally restricting dated records to a range."""
+    if date_from and date_to and date_from > date_to:
+        raise ValueError("تاريخ البداية يجب أن يكون قبل تاريخ النهاية أو مساوياً له.")
+
+    def in_range(value: object) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, datetime):
+            day = value.date()
+        elif isinstance(value, date):
+            day = value
+        else:
+            try:
+                day = date.fromisoformat(str(value)[:10])
+            except (TypeError, ValueError):
+                return False
+        return (date_from is None or day >= date_from) and (date_to is None or day <= date_to)
+
     summary = get_dashboard_summary(session)
     assets = list(session.scalars(select(Asset).order_by(Asset.brand, Asset.model)).all())
     offices = list(session.scalars(select(Office).order_by(Office.name)).all())
@@ -100,7 +123,7 @@ def export_management_report(session: Session, file_path: str | Path) -> int:
         select(AuditLog).order_by(AuditLog.occurred_at.desc()).limit(10000)
     ).all())
 
-    # Aggregate asset ownership and lifecycle costs by office.
+    if date_from or date_to:\n        movements = [row for row in movements if in_range(row.occurred_at)]\n        custody_cards = [row for row in custody_cards if in_range(row.created_at)]\n        maintenance = [row for row in maintenance if in_range(row.reported_at)]\n        usages = [row for row in usages if in_range(row.used_at)]\n        purchases = [row for row in purchases if in_range(row.purchase_date)]\n        documents = [row for row in documents if in_range(row.created_at)]\n        audits = [row for row in audits if in_range(row.occurred_at)]\n\n    # Aggregate asset ownership and lifecycle costs by office.
     # Assets without an office remain visible in a dedicated row.
     office_metrics: dict[str, dict[str, float]] = defaultdict(lambda: {
         "assets": 0, "assigned": 0, "maintenance": 0,
