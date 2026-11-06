@@ -72,6 +72,8 @@ export async function saveOfficialCustodyCard(
       tx.set(cardRef, recordToSave, { merge: true });
       tx.set(movementRef, {
         assetId: cardId,
+        officeId: recordToSave.officeId || '',
+        warehouseId: recordToSave.warehouseId || '',
         assetLabel: `بطاقة عهدة: ${recordToSave.cardNumber} (${recordToSave.responsibleName})`,
         movementType: card.id ? 'custody_transferred' : 'assigned',
         toEmployee: recordToSave.responsibleName,
@@ -182,6 +184,8 @@ export async function addCustodyRecord(
       const movementRef = doc(collection(db, 'asset_movements'));
       tx.set(movementRef, {
         assetId: card.assetId,
+        officeId: assetData.officeId || '',
+        warehouseId: assetData.warehouseId || '',
         assetLabel,
         movementType: 'assigned',
         toEmployee: card.employeeName.trim(),
@@ -231,6 +235,8 @@ export async function approveCustodyRecord(
       const movement = doc(collection(db, 'asset_movements'));
       tx.set(movement, {
         assetId: data.assetId,
+        officeId: data.officeId || '',
+        warehouseId: data.warehouseId || '',
         assetLabel: data.assetLabel,
         movementType: 'custody_approved',
         toEmployee: data.employeeName,
@@ -285,6 +291,8 @@ export async function rejectCustodyRecord(
       const movement = doc(collection(db, 'asset_movements'));
       tx.set(movement, {
         assetId: data.assetId,
+        officeId: data.officeId || '',
+        warehouseId: data.warehouseId || '',
         assetLabel: data.assetLabel || 'بطاقة عهدة',
         movementType: 'custody_rejected',
         fromEmployee: data.responsibleName || data.employeeName,
@@ -392,8 +400,10 @@ export async function transferCustodyRecord(
 
       const movement = doc(collection(db, 'asset_movements'));
       tx.set(movement, {
-        assetId: card.assetId || card.id,
-        assetLabel: card.assetLabel || 'بطاقة عهدة',
+        assetId: data.assetId || card.id,
+        officeId: data.officeId || '',
+        warehouseId: data.warehouseId || '',
+        assetLabel: data.assetLabel || 'بطاقة عهدة',
         movementType: 'custody_transferred',
         fromEmployee: data.responsibleName || data.employeeName,
         toEmployee: newEmployeeName.trim(),
