@@ -15,7 +15,7 @@ import {
 import * as XLSX from 'xlsx';
 import { Asset, AssetCategory, ASSET_CATEGORY_LABELS, ASSET_STATUS_LABELS, Office } from '../types';
 import { parseCSV } from '../services/importService';
-import { createAsset, updateAsset } from '../services/assetService';
+import { createAsset, transferAsset, updateAsset } from '../services/assetService';
 import { useAuth } from '../context/AuthContext';
 
 interface EditableImportRow {
@@ -320,13 +320,31 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
           // Update existing asset card
           const original = assets.find((a) => a.id === row.existingAssetId);
           if (original) {
+            const destinationChanged = Boolean(
+              matchedOffice &&
+              (original.officeId !== matchedOffice.id ||
+                (original.warehouseId || '') !== (matchedOffice.warehouseId || ''))
+            );
+
+            // Keep the transfer workflow as the single source of truth for
+            // location changes so linked document metadata and movement history
+            // are updated together instead of leaving stale scope on attachments.
+            if (destinationChanged && matchedOffice) {
+              await transferAsset(
+                original,
+                matchedOffice,
+                'تحديث موقع الأصل عبر استيراد ملف',
+                actorName
+              );
+            }
+
             await updateAsset({
               ...original,
               brand: row.brand,
               model: row.model,
               category: row.category,
               serialNumber: row.serialNumber,
-              officeName: row.officeName,
+              officeName: matchedOffice?.name || row.officeName,
               officeId: matchedOffice?.id || original.officeId,
               warehouseId: matchedOffice?.warehouseId || original.warehouseId,
               cpu: row.cpu || undefined,
