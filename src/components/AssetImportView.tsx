@@ -206,7 +206,8 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
         retired: 'retired', 'مستبعد': 'retired',
         returned: 'returned', 'معاد': 'returned', 'معاد للمستودع': 'returned',
       };
-      const status = statusAliases[statusRaw] || 'available';\n      const statusInvalid = !statusAliases[statusRaw];
+      const status = statusAliases[statusRaw] || 'available';
+      const statusInvalid = !statusAliases[statusRaw];
       const cpu = (raw.cpu || raw['المعالج'] || '').trim();
       const ram = (raw.ram || raw['الذاكرة'] || '').trim();
       const storage = (raw.storage || raw['التخزين'] || '').trim();
@@ -216,7 +217,9 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
         error = 'اسم الشركة والموديل مطلوبان';
       } else if (!serialNumber) {
         error = 'الرقم التسلسلي مطلوب';
-      } else if (statusInvalid) {\n        error = 'حالة الأصل غير صحيحة؛ استخدم حالة معتمدة من النموذج';\n      } else if (firstRowBySerial.has(serialNumber)) {
+      } else if (statusInvalid) {
+        error = 'حالة الأصل غير صحيحة؛ استخدم حالة معتمدة من النموذج';
+      } else if (firstRowBySerial.has(serialNumber)) {
         error = `الرقم التسلسلي مكرر داخل الملف (ظهر أولاً في السطر ${firstRowBySerial.get(serialNumber)})`;
       } else {
         firstRowBySerial.set(serialNumber, rowIndex);
