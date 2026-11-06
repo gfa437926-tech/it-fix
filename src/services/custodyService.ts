@@ -57,19 +57,20 @@ export async function saveOfficialCustodyCard(
   };
 
   try {
-    await setDoc(cardRef, recordToSave, { merge: true });
-
-    // Record movement
+    // Keep the official custody card and its movement in one atomic write.
     const movementRef = doc(collection(db, 'asset_movements'));
-    await setDoc(movementRef, {
-      assetId: cardId,
-      assetLabel: `بطاقة عهدة: ${recordToSave.cardNumber} (${recordToSave.responsibleName})`,
-      movementType: card.id ? 'custody_transferred' : 'assigned',
-      toEmployee: recordToSave.responsibleName,
-      toOffice: `${recordToSave.directorate || ''} / ${recordToSave.department || ''} / ${recordToSave.officeName}`,
-      occurredAt: now,
-      custodyId: cardId,
-      notes: `تم توثيق بطاقة العهدة الرسمية بواسطة ${actorName || actorEmail || 'المتحكم'}`,
+    await runTransaction(db, async (tx) => {
+      tx.set(cardRef, recordToSave, { merge: true });
+      tx.set(movementRef, {
+        assetId: cardId,
+        assetLabel: `بطاقة عهدة: ${recordToSave.cardNumber} (${recordToSave.responsibleName})`,
+        movementType: card.id ? 'custody_transferred' : 'assigned',
+        toEmployee: recordToSave.responsibleName,
+        toOffice: `${recordToSave.directorate || ''} / ${recordToSave.department || ''} / ${recordToSave.officeName}`,
+        occurredAt: now,
+        custodyId: cardId,
+        notes: `تم توثيق بطاقة العهدة الرسمية بواسطة ${actorName || actorEmail || 'المتحكم'}`,
+      });
     });
 
     return cardId;
