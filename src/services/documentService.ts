@@ -8,6 +8,7 @@ import {
   orderBy,
   where,
   getDoc,
+  runTransaction,
   QueryConstraint,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -87,23 +88,33 @@ export async function uploadAssetDocument(
       });
     }
 
-    const docRecord: AssetDocument = {
-      id: docId,
-      assetId,
-      officeId: assetData.officeId || '',
-      warehouseId: assetData.warehouseId || '',
-      purchaseRecordId: purchaseRecordId || '',
-      fileName: file.name,
-      documentType,
-      storagePath,
-      contentType: file.type || 'application/octet-stream',
-      sizeBytes: file.size,
-      uploadedBy,
-      createdAt: new Date().toISOString(),
-      downloadUrl,
-    };
+    // Read the asset and write its document metadata in one transaction.
+    // If a transfer commits while the file is uploading, Firestore retries this
+    // transaction and the document receives the asset's new scope, not stale IDs.
+    await runTransaction(db, async (transaction) => {
+      const currentAssetSnap = await transaction.get(doc(db, 'assets', assetId));
+      if (!currentAssetSnap.exists()) {
+        throw new Error('الأصل المرتبط بالمستند لم يعد موجوداً');
+      }
+      const currentAsset = currentAssetSnap.data();
+      const docRecord: AssetDocument = {
+        id: docId,
+        assetId,
+        officeId: currentAsset.officeId || '',
+        warehouseId: currentAsset.warehouseId || '',
+        purchaseRecordId: purchaseRecordId || '',
+        fileName: file.name,
+        documentType,
+        storagePath,
+        contentType: file.type || 'application/octet-stream',
+        sizeBytes: file.size,
+        uploadedBy,
+        createdAt: new Date().toISOString(),
+        downloadUrl,
+      };
 
-    await setDoc(doc(db, 'asset_documents', docId), docRecord);
+      transaction.set(doc(db, 'asset_documents', docId), docRecord);
+    });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `asset_documents/${docId}`);
   }
