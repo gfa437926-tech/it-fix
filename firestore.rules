@@ -50,14 +50,22 @@ service cloud.firestore {
       // A new account may create only its own limited profile. The first
       // controller is elevated only after the controller bootstrap document
       // has been created successfully for this same authenticated UID.
-      allow create: if signedIn() &&
-        request.auth.uid == uid &&
-        request.resource.data.uid == uid &&
-        request.resource.data.email == request.auth.token.email &&
-        request.resource.data.isActive == true &&
+      allow create: if
         (
-          request.resource.data.role == 'it_manager' ||
-          (isPrimaryController() && request.resource.data.role == 'admin')
+          // The primary controller may provision a profile for an existing
+          // Firebase Auth UID supplied through the user-management screen.
+          isSuperAdmin() &&
+          request.resource.data.uid == uid &&
+          request.resource.data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'isActive'])
+        ) ||
+        (
+          // Self-registration is restricted to the least-privileged role.
+          signedIn() &&
+          request.auth.uid == uid &&
+          request.resource.data.uid == uid &&
+          request.resource.data.email == request.auth.token.email &&
+          request.resource.data.isActive == true &&
+          request.resource.data.role == 'it_manager'
         );
 
       // Users can edit basic profile details only; role and activation state
