@@ -358,6 +358,17 @@ service cloud.firestore {
     }
 
     // Document metadata follows the location of its linked asset.
+    function isAssetDocumentScopeSync() {
+      let parentAssetPath = /databases/$(database)/documents/assets/$(resource.data.assetId);
+      return isScopedAccessEnabled() &&
+        hasPermission('assets.update') &&
+        hasAssignedScope(resource.data.officeId, resource.data.warehouseId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['officeId', 'warehouseId']) &&
+        existsAfter(parentAssetPath) &&
+        getAfter(parentAssetPath).data.officeId == request.resource.data.officeId &&
+        getAfter(parentAssetPath).data.warehouseId == request.resource.data.warehouseId;
+    }
+
     match /asset_documents/{documentId} {
       allow read: if isPrimaryController() || isLegacyItManager() ||
         (isScopedAccessEnabled() &&
@@ -366,10 +377,13 @@ service cloud.firestore {
       allow create: if isPrimaryController() || isLegacyItManager() ||
         (isScopedAccessEnabled() && hasPermission('documents.manage') &&
           hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
+      // Asset transfers may update only the two scope fields, and only when
+      // the parent asset is moved to the exact same scope in this transaction.
       allow update: if isPrimaryController() || isLegacyItManager() ||
         (isScopedAccessEnabled() && hasPermission('documents.manage') &&
           hasAssignedScope(resource.data.officeId, resource.data.warehouseId) &&
-          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId)) ||
+        isAssetDocumentScopeSync();
       allow delete: if isPrimaryController() || isLegacyItManager() ||
         (isScopedAccessEnabled() && hasPermission('documents.manage') &&
           hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
