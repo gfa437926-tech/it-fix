@@ -244,6 +244,8 @@ export const MOVEMENT_TYPE_LABELS: Record<string, string> = {
 export interface AssetMovement {
   id: string;
   assetId: string;
+  officeId?: string;
+  warehouseId?: string;
   assetLabel: string;
   movementType: string;
   occurredAt: string;
