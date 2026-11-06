@@ -106,13 +106,21 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Clear the picker immediately so selecting the same file again fires onChange.
+    e.currentTarget.value = '';
+
+    setRows([]);
     setFileName(file.name);
     setResultSummary(null);
     setErrorMsg('');
 
     const reader = new FileReader();
+    reader.onerror = () => {
+      setRows([]);
+      setErrorMsg('حدث خطأ أثناء قراءة الملف من الجهاز. حاول اختيار الملف مرة أخرى.');
+    };
 
-    if (file.name.endsWith('.csv')) {
+    if (file.name.toLowerCase().endsWith('.csv')) {
       reader.onload = (event) => {
         try {
           const text = event.target?.result as string;
