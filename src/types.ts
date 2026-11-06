@@ -349,10 +349,10 @@ export const ACCESS_PROFILE_LABELS: Record<AccessProfile, string> = {
 };
 
 export const ACCESS_PROFILE_PRESETS: Record<Exclude<AccessProfile, 'custom'>, UserPermission[]> = {
-  asset_operator: ['assets.read', 'assets.create', 'assets.update', 'reports.read'],
-  warehouse_manager: ['assets.read', 'warehouses.read', 'warehouses.manage', 'offices.read', 'spareparts.read', 'spareparts.manage', 'reports.read'],
-  office_manager: ['assets.read', 'offices.read', 'offices.manage', 'warehouses.read', 'reports.read'],
-  custody_officer: ['assets.read', 'custody.read', 'custody.manage', 'reports.read'],
+  asset_operator: ['assets.read', 'assets.create', 'assets.update', 'documents.read', 'documents.manage', 'reports.read'],
+  warehouse_manager: ['assets.read', 'warehouses.read', 'warehouses.manage', 'offices.read', 'spareparts.read', 'spareparts.manage', 'documents.read', 'reports.read'],
+  office_manager: ['assets.read', 'offices.read', 'offices.manage', 'warehouses.read', 'documents.read', 'reports.read'],
+  custody_officer: ['assets.read', 'custody.read', 'custody.manage', 'documents.read', 'documents.manage', 'reports.read'],
   maintenance_technician: ['assets.read', 'maintenance.read', 'maintenance.manage', 'spareparts.read', 'spareparts.manage', 'documents.read', 'documents.manage', 'reports.read'],
   auditor: ['assets.read', 'offices.read', 'warehouses.read', 'custody.read', 'maintenance.read', 'spareparts.read', 'documents.read', 'reports.read'],
   viewer: ['assets.read', 'offices.read', 'warehouses.read', 'custody.read', 'maintenance.read', 'spareparts.read', 'documents.read'],
