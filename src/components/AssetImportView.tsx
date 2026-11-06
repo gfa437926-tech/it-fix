@@ -292,6 +292,8 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
           error = 'الرقم التسلسلي مطلوب';
         } else if (firstRowBySerial.has(serial)) {
           error = `الرقم التسلسلي مكرر داخل الملف (ظهر أولاً في السطر ${firstRowBySerial.get(serial)})`;
+        } else if (!Object.prototype.hasOwnProperty.call(ASSET_STATUS_LABELS, row.status)) {
+          error = 'حالة الأصل غير صحيحة؛ اختر حالة معتمدة';
         } else {
           firstRowBySerial.set(serial, row.rowIndex);
         }
@@ -327,6 +329,11 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
       if (!row.brand.trim() || !row.model.trim() || !normalizedSerial) {
         failed++;
         errors.push(`السطر ${row.rowIndex}: الشركة والموديل والرقم التسلسلي حقول إلزامية`);
+        continue;
+      }
+      if (!Object.prototype.hasOwnProperty.call(ASSET_STATUS_LABELS, row.status)) {
+        failed++;
+        errors.push(`السطر ${row.rowIndex}: حالة الأصل غير معتمدة`);
         continue;
       }
       if (appliedSerials.has(normalizedSerial)) {
