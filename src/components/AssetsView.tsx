@@ -159,6 +159,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
           ram: ram.trim() || undefined,
           storage: storageVal.trim() || undefined,
           officeId: selectedOffice?.id || editingAsset.officeId,
+          warehouseId: selectedOffice?.warehouseId || editingAsset.warehouseId,
           officeName: selectedOffice?.name || editingAsset.officeName,
         });
       } else {
@@ -173,6 +174,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
             ram: ram.trim() || undefined,
             storage: storageVal.trim() || undefined,
             officeId: selectedOffice?.id,
+            warehouseId: selectedOffice?.warehouseId,
             officeName: selectedOffice?.name || 'المستودع الرئيسي',
             receivedAt: new Date().toISOString(),
           },
