@@ -101,10 +101,18 @@ def create_purchase_record(
         raise ValueError("تعذر تسجيل الفاتورة بسبب تعارض في البيانات.") from exc
 
 
-def list_purchase_records(session: Session) -> list[PurchaseRecord]:
-    return list(session.scalars(
-        select(PurchaseRecord).order_by(
-            PurchaseRecord.purchase_date.desc(),
-            PurchaseRecord.created_at.desc(),
-        )
-    ).all())
+def list_purchase_records(
+    session: Session,
+    asset_id: str | None = None,
+) -> list[PurchaseRecord]:
+    query = select(PurchaseRecord).order_by(
+        PurchaseRecord.purchase_date.desc(),
+        PurchaseRecord.created_at.desc(),
+        PurchaseRecord.id.desc(),
+    )
+    if asset_id is not None:
+        normalized_asset_id = asset_id.strip()
+        if not normalized_asset_id:
+            return []
+        query = query.where(PurchaseRecord.asset_id == normalized_asset_id)
+    return list(session.scalars(query).all())
