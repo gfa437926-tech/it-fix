@@ -84,7 +84,7 @@ def test_management_report_contains_operational_sheets_and_counts(tmp_path: Path
         try:
             names = set(workbook.sheetnames)
             assert {
-                "الملخص", "الأصول", "المكاتب", "بطاقات العهدة",
+                "الملخص", "الأصول", "المكاتب", "تحليل المكاتب", "بطاقات العهدة",
                 "بنود العهدة", "الصيانة", "قطع الغيار",
                 "المشتريات والضمان", "المرفقات", "الحركات", "التدقيق",
             } <= names
@@ -99,6 +99,10 @@ def test_management_report_contains_operational_sheets_and_counts(tmp_path: Path
             assert workbook["بطاقات العهدة"]["B2"].value == "RPT-CARD-1"
             assert workbook["الصيانة"]["D2"].value == "فحص الجهاز"
             assert workbook["المشتريات والضمان"]["E2"].value == "INV-RPT-1"
+            office_analysis = workbook["تحليل المكاتب"]
+            assert office_analysis["A2"].value == office.name
+            assert office_analysis["B2"].value == 1
+            assert office_analysis["E2"].value == 950
         finally:
             workbook.close()
     finally:
