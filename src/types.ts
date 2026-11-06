@@ -208,6 +208,7 @@ export interface PurchaseRecord {
 }
 
 export type MovementType =
+  | 'created'
   | 'assigned'
   | 'returned'
   | 'transferred'
@@ -220,6 +221,7 @@ export type MovementType =
   | 'purchase_registered';
 
 export const MOVEMENT_TYPE_LABELS: Record<string, string> = {
+  created: 'إضافة أصل إلى المخزون',
   assigned: 'تسليم عهدة جديدة',
   returned: 'إرجاع جهاز للمستودع',
   transferred: 'نقل جهاز بين المكاتب',
