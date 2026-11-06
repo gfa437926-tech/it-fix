@@ -381,9 +381,14 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Physical inventory checks are append-only records.
+    // Physical inventory checks are append-only and scoped to the checked asset location.
     match /inventory_checks/{checkId} {
-      allow read, create: if isAdmin();
+      allow read: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && (hasPermission('inventory.read') || hasPermission('inventory.manage')) &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
+      allow create: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('inventory.manage') &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
       allow update, delete: if false;
     }
 
