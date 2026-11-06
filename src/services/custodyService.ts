@@ -190,6 +190,14 @@ export async function approveCustodyRecord(
       if (data.status !== 'active' || data.approvalStatus !== 'pending') {
         throw new Error('بطاقة العهدة ليست بانتظار الاعتماد');
       }
+      if (!data.assetId) throw new Error('بطاقة العهدة غير مرتبطة بمعرّف أصل');
+
+      const assetRef = doc(db, 'assets', data.assetId);
+      const assetSnap = await tx.get(assetRef);
+      if (!assetSnap.exists()) throw new Error('الأصل المرتبط بالعهدة غير موجود');
+      if (assetSnap.data().status !== 'assigned') {
+        throw new Error('الأصل لم يعد في حالة تسليم؛ لا يمكن اعتماد العهدة قبل مراجعة حالته');
+      }
 
       const now = new Date().toISOString();
       tx.update(cardRef, {
