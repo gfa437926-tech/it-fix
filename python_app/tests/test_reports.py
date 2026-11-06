@@ -178,7 +178,8 @@ def test_management_report_filters_dated_records_and_validates_range(tmp_path: P
                 for row in range(2, workbook["الملخص"].max_row + 1)
             }
             assert overview_rows["فترة التقرير"] == "2026-01-01 — 2026-12-31"
-            assert "لقطة حالية" in overview_rows["ملاحظة"]
+            assert "مؤشرات حالة الأصول والمكاتب لقطة حالية" in overview_rows["ملاحظة"]
+            assert "جداول الحركات والعهدة والصيانة والمشتريات" in overview_rows["ملاحظة"]
             assert overview_rows["إجمالي قيمة المشتريات ضمن الفترة"] == 200
             assert overview_rows["إجمالي تكلفة الصيانة ضمن الفترة"] == 0
         finally:
