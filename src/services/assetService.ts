@@ -339,6 +339,7 @@ export async function recordInventoryCheck(
       category: asset.category,
       statusAtCheck: asset.status,
       officeId: asset.officeId || '',
+      warehouseId: asset.warehouseId || '',
       officeName: asset.officeName || 'المستودع الرئيسي',
       checkedAt,
       checkedByUid: actor.uid,
