@@ -239,7 +239,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isPrimaryController =
     Boolean(user?.uid) && primaryControllerUid === user?.uid;
 
-  const isAdmin = profile?.role === 'admin' && profile?.isActive === true;
+  // Admin-only UI follows the immutable controller UID, not a mutable profile role.
+  const isAdmin = isPrimaryController && profile?.isActive === true;
   const isItManager =
     (profile?.role === 'admin' || profile?.role === 'it_manager') && profile?.isActive === true;
 
