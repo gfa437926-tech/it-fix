@@ -44,9 +44,9 @@ export const AssetDocumentsView: React.FC<AssetDocumentsViewProps> = ({ assets }
     const unsub = watchAssetDocuments(undefined, (docs) => {
       setDocuments(docs);
       setLoading(false);
-    });
+    }, undefined, profile);
     return () => unsub();
-  }, []);
+  }, [profile]);
 
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
