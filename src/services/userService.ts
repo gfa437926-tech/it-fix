@@ -135,9 +135,8 @@ export async function updateUserAccessScope(
     )
   );
 
-  if (officeIds.length === 0 && warehouseIds.length === 0) {
-    throw new Error('يجب إسناد مكتب واحد أو مستودع واحد على الأقل قبل تفعيل الصلاحيات المقيدة');
-  }
+  // An empty scope is a valid lock-down state: the account remains active,
+  // but Firestore/Storage rules deny access to all office/warehouse-scoped data.
 
   const ref = doc(db, 'users', uid);
   try {
