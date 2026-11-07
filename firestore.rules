@@ -341,8 +341,8 @@ service cloud.firestore {
 
     // System settings and controller configuration
     match /system_settings/{docId} {
-      // Auth bootstrap and the app's settings listener run before the user profile loads.
-      allow read: if signedIn();
+      // The controller identity is readable for auth bootstrap; integration settings stay controller-only.
+      allow read: if signedIn() && (docId == 'controller' || isPrimaryController());
 
       // Allow exactly one initial controller bootstrap. Subsequent edits to
       // controller identity and all other system settings require that UID.
