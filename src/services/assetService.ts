@@ -42,31 +42,52 @@ export function watchAssets(
   if (scope?.accessControlEnabled === true) {
     const officeIds = [...new Set(scope.officeIds || [])].filter(Boolean);
     const warehouseIds = [...new Set(scope.warehouseIds || [])].filter(Boolean);
-    const groups: { field: 'officeId' | 'warehouseId'; ids: string[] }[] = [];
-    for (let i = 0; i < officeIds.length; i += 30) {
-      groups.push({ field: 'officeId', ids: officeIds.slice(i, i + 30) });
+    const chunk = (ids: string[]) => {
+      const result: string[][] = [];
+      for (let i = 0; i < ids.length; i += 30) result.push(ids.slice(i, i + 30));
+      return result;
+    };
+    const officeChunks = chunk(officeIds);
+    const warehouseChunks = chunk(warehouseIds);
+    const scopedQueries: { key: string; q: ReturnType<typeof query> }[] = [];
+
+    // Records with both IDs must satisfy both assignments in the same query.
+    for (const offices of officeChunks) {
+      for (const warehouses of warehouseChunks) {
+        scopedQueries.push({
+          key: `both:${offices.join(',')}:${warehouses.join(',')}`,
+          q: query(assetsRef, where('officeId', 'in', offices), where('warehouseId', 'in', warehouses)),
+        });
+      }
+      // Office-only records are permitted only when warehouseId is explicitly empty.
+      scopedQueries.push({
+        key: `office:${offices.join(',')}`,
+        q: query(assetsRef, where('officeId', 'in', offices), where('warehouseId', '==', '')),
+      });
     }
-    for (let i = 0; i < warehouseIds.length; i += 30) {
-      groups.push({ field: 'warehouseId', ids: warehouseIds.slice(i, i + 30) });
+    // Warehouse-only records are permitted only when officeId is explicitly empty.
+    for (const warehouses of warehouseChunks) {
+      scopedQueries.push({
+        key: `warehouse:${warehouses.join(',')}`,
+        q: query(assetsRef, where('officeId', '==', ''), where('warehouseId', 'in', warehouses)),
+      });
     }
 
-    if (groups.length === 0) {
+    if (scopedQueries.length === 0) {
       onData([]);
       return () => undefined;
     }
 
     const snapshots = new Map<string, Map<string, Asset>>();
-    const unsubs = groups.map(({ field, ids }) =>
+    const unsubs = scopedQueries.map(({ key, q }) =>
       onSnapshot(
-        query(assetsRef, where(field, 'in', ids)),
+        q,
         (snapshot) => {
-          // Rebuild from all active query snapshots to remove records that
-          // moved outside this user's assigned scope.
           const current = new Map<string, Asset>();
           for (const docSnap of snapshot.docs) {
             current.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Asset);
           }
-          snapshots.set(field + ':' + ids.join(','), current);
+          snapshots.set(key, current);
           const merged = new Map<string, Asset>();
           for (const value of snapshots.values()) {
             for (const [id, asset] of value.entries()) merged.set(id, asset);
