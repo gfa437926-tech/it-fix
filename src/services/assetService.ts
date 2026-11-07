@@ -9,6 +9,7 @@ import {
   serverTimestamp,
   addDoc,
   where,
+  Query,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { Asset, AssetStatus, Office, UserProfile } from '../types';
@@ -49,7 +50,7 @@ export function watchAssets(
     };
     const officeChunks = chunk(officeIds);
     const warehouseChunks = chunk(warehouseIds);
-    const scopedQueries: { key: string; q: ReturnType<typeof query> }[] = [];
+    const scopedQueries: { key: string; q: Query }[] = [];
 
     // Records with both IDs must satisfy both assignments in the same query.
     for (const offices of officeChunks) {
