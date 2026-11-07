@@ -58,6 +58,38 @@ test('allows reads when both office and warehouse are assigned', async () => {
   await assertSucceeds(getDoc(doc(db, 'assets', 'asset-a')));
 });
 
+test('allows explicitly office-only records for an assigned office', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'assets', 'office-only'), {
+      officeId: 'office-a',
+      warehouseId: '',
+    });
+  });
+  const db = env.authenticatedContext('scoped-user').firestore();
+  await assertSucceeds(getDoc(doc(db, 'assets', 'office-only')));
+});
+
+test('allows explicitly warehouse-only records for an assigned warehouse', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'assets', 'warehouse-only'), {
+      officeId: '',
+      warehouseId: 'warehouse-a',
+    });
+  });
+  const db = env.authenticatedContext('scoped-user').firestore();
+  await assertSucceeds(getDoc(doc(db, 'assets', 'warehouse-only')));
+});
+
+test('denies legacy asset records when both scope fields are absent', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'assets', 'legacy-unscoped'), {
+      name: 'Legacy asset without scope',
+    });
+  });
+  const db = env.authenticatedContext('scoped-user').firestore();
+  await assertFails(getDoc(doc(db, 'assets', 'legacy-unscoped')));
+});
+
 test('denies a warehouse outside the assigned warehouse even in the assigned office', async () => {
   const db = env.authenticatedContext('scoped-user').firestore();
   await assertFails(getDoc(doc(db, 'assets', 'asset-wrong-warehouse')));
