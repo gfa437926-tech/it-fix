@@ -111,6 +111,27 @@ test('allows list queries only when both assigned scope predicates are present',
   await assertFails(getDocs(incompleteQuery));
 });
 
+test('office-only and warehouse-only list queries return only their assigned records', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'assets', 'office-only-list'), { officeId: 'office-a', warehouseId: '' });
+    await setDoc(doc(db, 'assets', 'warehouse-only-list'), { officeId: '', warehouseId: 'warehouse-a' });
+  });
+  const db = env.authenticatedContext('scoped-user').firestore();
+  const officeOnly = await assertSucceeds(getDocs(query(
+    collection(db, 'assets'),
+    where('officeId', 'in', ['office-a']),
+    where('warehouseId', '==', ''),
+  )));
+  assert.equal(officeOnly.size, 1);
+  const warehouseOnly = await assertSucceeds(getDocs(query(
+    collection(db, 'assets'),
+    where('officeId', '==', ''),
+    where('warehouseId', 'in', ['warehouse-a']),
+  )));
+  assert.equal(warehouseOnly.size, 1);
+});
+
 test('denies an office outside the assigned office even in the assigned warehouse', async () => {
   const db = env.authenticatedContext('scoped-user').firestore();
   await assertFails(getDoc(doc(db, 'assets', 'asset-wrong-office')));
