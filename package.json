@@ -17,7 +17,9 @@
     "android:add": "cap add android",
     "android:run": "cap run android",
     "mobile:build": "npm run build && cap sync android",
-    "test:rules": "firebase emulators:exec --project demo-itfix-rbac --only firestore,storage \"node --test tests/rules.test.mjs\""
+    "test:rules": "firebase emulators:exec --project demo-itfix-rbac --only firestore,storage \"node --test tests/rules.test.mjs\"",
+    "test:audit": "node --test tests/scope-audit.test.mjs",
+    "audit:scope": "node scripts/audit-scope-export.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
