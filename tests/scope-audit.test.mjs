@@ -37,3 +37,24 @@ test('scope audit is dry-run only and reports missing scope without changing inp
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('scope audit rejects missing input and malformed collection without mutating source', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'itfix-scope-audit-invalid-'));
+  const input = join(directory, 'export.json');
+  try {
+    const missing = spawnSync(process.execPath, ['scripts/audit-scope-export.mjs'], { encoding: 'utf8' });
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /Usage:/);
+
+    const original = JSON.stringify({ collections: { assets: { id: 'not-an-array' } } });
+    writeFileSync(input, original);
+    const malformed = spawnSync(process.execPath, ['scripts/audit-scope-export.mjs', '--input', input], {
+      encoding: 'utf8',
+    });
+    assert.notEqual(malformed.status, 0);
+    assert.match(malformed.stderr, /must be an array/);
+    assert.equal(readFileSync(input, 'utf8'), original);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
