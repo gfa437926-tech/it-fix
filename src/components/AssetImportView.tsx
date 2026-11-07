@@ -13,7 +13,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { Asset, AssetCategory, ASSET_CATEGORY_LABELS, ASSET_STATUS_LABELS, Office } from '../types';
+import { Asset, AssetCategory, AssetStatus, ASSET_CATEGORY_LABELS, ASSET_STATUS_LABELS, Office } from '../types';
 import { parseCSV } from '../services/importService';
 import { createAsset, transferAsset, updateAsset } from '../services/assetService';
 import { useAuth } from '../context/AuthContext';
@@ -27,7 +27,7 @@ interface EditableImportRow {
   model: string;
   serialNumber: string;
   officeName: string;
-  status: string;
+  status: AssetStatus;
   cpu: string;
   ram: string;
   storage: string;
@@ -108,13 +108,21 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Clear the picker immediately so selecting the same file again fires onChange.
+    e.currentTarget.value = '';
+
+    setRows([]);
     setFileName(file.name);
     setResultSummary(null);
     setErrorMsg('');
 
     const reader = new FileReader();
+    reader.onerror = () => {
+      setRows([]);
+      setErrorMsg('حدث خطأ أثناء قراءة الملف من الجهاز. حاول اختيار الملف مرة أخرى.');
+    };
 
-    if (file.name.endsWith('.csv')) {
+    if (file.name.toLowerCase().endsWith('.csv')) {
       reader.onload = (event) => {
         try {
           const text = event.target?.result as string;
@@ -199,20 +207,34 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
         'المستودع الرئيسي'
       ).trim();
 
-      const status = (raw.status || raw['الحالة'] || 'available').trim();
+      const statusRaw = (raw.status || raw['الحالة'] || 'available').trim().toLowerCase();
+      const statusAliases: Record<string, AssetStatus> = {
+        available: 'available', 'متوفر': 'available',
+        assigned: 'assigned', 'موزع': 'assigned', 'موزع في عهدة': 'assigned',
+        maintenance: 'maintenance', 'صيانة': 'maintenance', 'قيد الصيانة': 'maintenance',
+        damaged: 'damaged', 'تالف': 'damaged',
+        retired: 'retired', 'مستبعد': 'retired',
+        returned: 'returned', 'معاد': 'returned', 'معاد للمستودع': 'returned',
+      };
+      const status = statusAliases[statusRaw] || 'available';
+      const statusInvalid = !statusAliases[statusRaw];
       const cpu = (raw.cpu || raw['المعالج'] || '').trim();
       const ram = (raw.ram || raw['الذاكرة'] || '').trim();
       const storage = (raw.storage || raw['التخزين'] || '').trim();
 
       let error = '';
+      const duplicateRow = serialNumber ? firstRowBySerial.get(serialNumber) : undefined;
+      if (serialNumber && duplicateRow === undefined) {
+        firstRowBySerial.set(serialNumber, rowIndex);
+      }
       if (!brand || !model) {
         error = 'اسم الشركة والموديل مطلوبان';
       } else if (!serialNumber) {
         error = 'الرقم التسلسلي مطلوب';
-      } else if (firstRowBySerial.has(serialNumber)) {
-        error = `الرقم التسلسلي مكرر داخل الملف (ظهر أولاً في السطر ${firstRowBySerial.get(serialNumber)})`;
-      } else {
-        firstRowBySerial.set(serialNumber, rowIndex);
+      } else if (duplicateRow !== undefined) {
+        error = `الرقم التسلسلي مكرر داخل الملف (ظهر أولاً في السطر ${duplicateRow})`;
+      } else if (statusInvalid) {
+        error = 'حالة الأصل غير صحيحة؛ استخدم حالة معتمدة من النموذج';
       }
 
       // Check if existing asset matches this serial
@@ -238,6 +260,12 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
         }
         if (existing.storage !== storage && storage) {
           changes.push(`التخزين: ${existing.storage || 'فارغ'} ➔ ${storage}`);
+        }
+        if (existing.category !== category) {
+          changes.push(`التصنيف: ${ASSET_CATEGORY_LABELS[existing.category]} ➔ ${ASSET_CATEGORY_LABELS[category]}`);
+        }
+        if (existing.status !== status) {
+          changes.push(`الحالة: ${ASSET_STATUS_LABELS[existing.status].label} ➔ ${ASSET_STATUS_LABELS[status].label}`);
         }
       }
 
@@ -269,15 +297,67 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
     value: string
   ) => {
     setRows((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: value };
-      return updated;
+      const updated = prev.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, [field]: value } : row
+      );
+      const firstRowBySerial = new Map<string, number>();
+      return updated.map((row) => {
+        const serial = row.serialNumber.trim().toUpperCase();
+        const duplicateRow = serial ? firstRowBySerial.get(serial) : undefined;
+        if (serial && duplicateRow === undefined) {
+          firstRowBySerial.set(serial, row.rowIndex);
+        }
+        let error = '';
+        if (!row.brand.trim() || !row.model.trim()) {
+          error = 'اسم الشركة والموديل مطلوبان';
+        } else if (!serial) {
+          error = 'الرقم التسلسلي مطلوب';
+        } else if (duplicateRow !== undefined) {
+          error = `الرقم التسلسلي مكرر داخل الملف (ظهر أولاً في السطر ${duplicateRow})`;
+        } else if (!Object.prototype.hasOwnProperty.call(ASSET_STATUS_LABELS, row.status)) {
+          error = 'حالة الأصل غير صحيحة؛ اختر حالة معتمدة';
+        }
+        const original = serial
+          ? assets.find((asset) => (asset.serialNumber || '').trim().toUpperCase() === serial)
+          : undefined;
+        const changes: string[] = [];
+        if (original) {
+          if (original.officeName !== row.officeName && row.officeName) changes.push(`المكتب: ${original.officeName || 'المستودع'} ➔ ${row.officeName}`);
+          if (original.brand !== row.brand && row.brand) changes.push(`الشركة: ${original.brand} ➔ ${row.brand}`);
+          if (original.model !== row.model && row.model) changes.push(`الموديل: ${original.model} ➔ ${row.model}`);
+          if (original.category !== row.category) changes.push(`التصنيف: ${ASSET_CATEGORY_LABELS[original.category]} ➔ ${ASSET_CATEGORY_LABELS[row.category]}`);
+          if (original.status !== row.status) changes.push(`الحالة: ${ASSET_STATUS_LABELS[original.status].label} ➔ ${ASSET_STATUS_LABELS[row.status]?.label || row.status}`);
+          if (original.cpu !== row.cpu && row.cpu) changes.push(`المعالج: ${original.cpu || 'فارغ'} ➔ ${row.cpu}`);
+          if (original.ram !== row.ram && row.ram) changes.push(`الذاكرة: ${original.ram || 'فارغ'} ➔ ${row.ram}`);
+          if (original.storage !== row.storage && row.storage) changes.push(`التخزين: ${original.storage || 'فارغ'} ➔ ${row.storage}`);
+        }
+        return {
+          ...row,
+          serialNumber: serial,
+          isExisting: Boolean(original),
+          existingAssetId: original?.id,
+          changes,
+          error,
+        };
+      });
     });
   };
 
   // Execute Upsert: Add new cards + Update existing cards
   const handleApplyChanges = async (mode: 'all' | 'new_only' | 'updates_only') => {
-    if (rows.length === 0) return;
+    if (rows.length === 0 || isProcessing) return;
+
+    const selectedRows = rows.filter((row) =>
+      mode === 'all' ||
+      (mode === 'new_only' && !row.isExisting) ||
+      (mode === 'updates_only' && row.isExisting)
+    );
+    const validSelectedRows = selectedRows.filter((row) => !row.error);
+    if (validSelectedRows.length === 0) {
+      setErrorMsg('لا توجد سجلات صالحة للتطبيق ضمن الخيار المحدد. صحح الأخطاء أو اختر نوعاً آخر من العمليات.');
+      return;
+    }
+
     setIsProcessing(true);
     setErrorMsg('');
 
@@ -287,21 +367,23 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
     const errors: string[] = [];
     const appliedSerials = new Set<string>();
 
-    for (const row of rows) {
+    for (const row of selectedRows) {
       if (row.error) {
         failed++;
+        errors.push(`السطر ${row.rowIndex}: ${row.error}`);
         continue;
       }
-
-      // Filter by execution mode
-      if (mode === 'new_only' && row.isExisting) continue;
-      if (mode === 'updates_only' && !row.isExisting) continue;
 
       // Revalidate editable preview values immediately before writing.
       const normalizedSerial = row.serialNumber.trim().toUpperCase();
       if (!row.brand.trim() || !row.model.trim() || !normalizedSerial) {
         failed++;
         errors.push(`السطر ${row.rowIndex}: الشركة والموديل والرقم التسلسلي حقول إلزامية`);
+        continue;
+      }
+      if (!Object.prototype.hasOwnProperty.call(ASSET_STATUS_LABELS, row.status)) {
+        failed++;
+        errors.push(`السطر ${row.rowIndex}: حالة الأصل غير معتمدة`);
         continue;
       }
       if (appliedSerials.has(normalizedSerial)) {
@@ -312,47 +394,54 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
       appliedSerials.add(normalizedSerial);
 
       try {
-        const matchedOffice = offices.find((office) => office.name.trim().toLowerCase() === row.officeName.trim().toLowerCase());
+        const matchedOffice = offices.find((office) =>
+          office.name.trim().toLowerCase() === row.officeName.trim().toLowerCase()
+        );
         if (profile?.accessControlEnabled === true && !matchedOffice) {
           throw new Error('المكتب الموجود في الملف غير موجود ضمن المكاتب المصرح بها للمستخدم');
         }
-        if (row.isExisting && row.existingAssetId) {
-          // Update existing asset card
-          const original = assets.find((a) => a.id === row.existingAssetId);
-          if (original) {
-            const destinationChanged = Boolean(
-              matchedOffice &&
-              (original.officeId !== matchedOffice.id ||
-                (original.warehouseId || '') !== (matchedOffice.warehouseId || ''))
-            );
 
-            // Keep the transfer workflow as the single source of truth for
-            // location changes so linked document metadata and movement history
-            // are updated together instead of leaving stale scope on attachments.
-            if (destinationChanged && matchedOffice) {
-              await transferAsset(
-                original,
-                matchedOffice,
-                'تحديث موقع الأصل عبر استيراد ملف',
-                actorName
-              );
-            }
-
-            await updateAsset({
-              ...original,
-              brand: row.brand,
-              model: row.model,
-              category: row.category,
-              serialNumber: row.serialNumber,
-              officeName: matchedOffice?.name || row.officeName,
-              officeId: matchedOffice?.id || original.officeId,
-              warehouseId: matchedOffice?.warehouseId || original.warehouseId,
-              cpu: row.cpu || undefined,
-              ram: row.ram || undefined,
-              storage: row.storage || undefined,
-            });
-            updated++;
+        if (row.isExisting) {
+          // Never report a silent success when the matched asset disappeared
+          // or the preview no longer points to a valid existing asset.
+          const original = row.existingAssetId
+            ? assets.find((a) => a.id === row.existingAssetId)
+            : undefined;
+          if (!original) {
+            failed++;
+            errors.push(`السطر ${row.rowIndex}: تعذر العثور على الأصل المطابق للتحديث؛ أعد تحميل البيانات ثم راجع الملف`);
+            continue;
           }
+
+          const destinationChanged = Boolean(
+            matchedOffice &&
+            (original.officeId !== matchedOffice.id ||
+              (original.warehouseId || '') !== (matchedOffice.warehouseId || ''))
+          );
+          if (destinationChanged && matchedOffice) {
+            await transferAsset(
+              original,
+              matchedOffice,
+              'تحديث موقع الأصل عبر استيراد ملف',
+              actorName
+            );
+          }
+
+          await updateAsset({
+            ...original,
+            brand: row.brand,
+            model: row.model,
+            category: row.category,
+            serialNumber: normalizedSerial,
+            officeName: matchedOffice?.name || row.officeName,
+            officeId: matchedOffice?.id || original.officeId,
+            warehouseId: matchedOffice?.warehouseId || original.warehouseId,
+            cpu: row.cpu || undefined,
+            ram: row.ram || undefined,
+            storage: row.storage || undefined,
+            status: row.status,
+          });
+          updated++;
         } else {
           // Create new asset card
           await createAsset(
@@ -361,10 +450,10 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
               brand: row.brand,
               model: row.model,
               serialNumber: row.serialNumber,
-              officeName: row.officeName || 'المستودع الرئيسي',
+              officeName: matchedOffice?.name || row.officeName || 'المستودع الرئيسي',
               officeId: matchedOffice?.id || '',
               warehouseId: matchedOffice?.warehouseId || '',
-              status: 'available',
+              status: row.status,
               cpu: row.cpu || undefined,
               ram: row.ram || undefined,
               storage: row.storage || undefined,
@@ -388,7 +477,9 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
       errors,
     });
     setIsProcessing(false);
-    if (onImportComplete) onImportComplete();
+    if ((newAdded > 0 || updated > 0) && onImportComplete) {
+      onImportComplete();
+    }
   };
 
   const newCardsCount = rows.filter((r) => !r.isExisting && !r.error).length;
@@ -579,6 +670,7 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
                     <th className="py-2.5 px-3">الموديل</th>
                     <th className="py-2.5 px-3">التصنيف</th>
                     <th className="py-2.5 px-3">المكتب / الموقع</th>
+                    <th className="py-2.5 px-3">حالة الأصل</th>
                     <th className="py-2.5 px-3">المواصفات (CPU / RAM / Disk)</th>
                     <th className="py-2.5 px-3">التغييرات المكتشفة</th>
                   </tr>
@@ -667,6 +759,20 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
                           onChange={(e) => handleCellChange(idx, 'officeName', e.target.value)}
                           className="bg-transparent border border-transparent hover:border-slate-300 focus:border-[#168C8C] focus:bg-white rounded px-1.5 py-0.5 w-32 text-xs"
                         />
+                      </td>
+
+                      {/* Asset status */}
+                      <td className="py-2.5 px-3">
+                        <select
+                          value={row.status}
+                          onChange={(e) => handleCellChange(idx, 'status', e.target.value as AssetStatus)}
+                          className="bg-transparent border border-transparent hover:border-slate-300 focus:border-[#168C8C] focus:bg-white rounded px-1.5 py-1 text-xs font-semibold"
+                          aria-label={`حالة الأصل في السطر ${row.rowIndex}`}
+                        >
+                          {Object.entries(ASSET_STATUS_LABELS).map(([key, meta]) => (
+                            <option key={key} value={key}>{meta.label}</option>
+                          ))}
+                        </select>
                       </td>
 
                       {/* Specs */}
