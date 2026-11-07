@@ -146,3 +146,19 @@ def test_context_warehouse_helper_rejects_unassigned_warehouse() -> None:
 
     with pytest.raises(PermissionError):
         _context().require_warehouse("warehouse-b", permission=Permission.ASSET_READ)
+
+
+def test_inactive_context_cannot_use_permissions_or_scope_helpers() -> None:
+    from python_app.services.authorization import Permission
+
+    context = _context()
+    object.__setattr__(context.user, "is_active", False)
+
+    assert context.has_permission(Permission.ASSET_READ) is False
+    assert context.filter_offices(["office-a"]) == []
+    with pytest.raises(PermissionError):
+        context.require_permission(Permission.ASSET_READ)
+    with pytest.raises(PermissionError):
+        context.require_office("office-a", permission=Permission.ASSET_READ)
+    with pytest.raises(PermissionError):
+        context.require_warehouse("warehouse-a", permission=Permission.ASSET_READ)
