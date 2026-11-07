@@ -119,7 +119,7 @@ function MainApp() {
 
   // Listen to Google Sheet connection settings
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isPrimaryController) return;
     const unsub = onSnapshot(
       doc(db, 'system_settings', 'google_sheets'),
       (snap) => {
@@ -130,7 +130,7 @@ function MainApp() {
       }
     );
     return () => unsub();
-  }, [user]);
+  }, [user, isPrimaryController]);
 
   // Listeners
   useEffect(() => {
