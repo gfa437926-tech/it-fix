@@ -16,6 +16,7 @@ class Permission(str, Enum):
     ASSET_READ = "assets.read"
     ASSET_CREATE = "assets.create"
     ASSET_UPDATE = "assets.update"
+    ASSET_DELETE = "assets.delete"
     ASSET_TRANSFER = "assets.transfer"
     ASSET_RETIRE = "assets.retire"
     OFFICE_READ = "offices.read"
