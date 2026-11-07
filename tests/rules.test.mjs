@@ -319,3 +319,32 @@ test('a user cannot promote their own profile by changing role or permissions', 
     permissions: { 'assets.delete': true },
   }));
 });
+
+test('scoped users cannot read Google Sheets integration settings', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'system_settings', 'controller'), {
+      primaryUid: 'controller-user', primaryEmail: 'controller@example.com',
+    });
+    await setDoc(doc(db, 'system_settings', 'google_sheets'), {
+      spreadsheetId: 'private-sheet-id',
+    });
+  });
+  const db = env.authenticatedContext('scoped-user').firestore();
+  await assertFails(getDoc(doc(db, 'system_settings', 'google_sheets')));
+});
+
+test('only the primary controller can read Google Sheets integration settings', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'system_settings', 'controller'), {
+      primaryUid: 'controller-user', primaryEmail: 'controller@example.com',
+    });
+    await setDoc(doc(db, 'system_settings', 'google_sheets'), {
+      spreadsheetId: 'private-sheet-id',
+    });
+  });
+  const db = env.authenticatedContext('controller-user').firestore();
+  const settings = await assertSucceeds(getDoc(doc(db, 'system_settings', 'google_sheets')));
+  assert.equal(settings.data().spreadsheetId, 'private-sheet-id');
+});
