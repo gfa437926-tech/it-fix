@@ -116,3 +116,33 @@ def test_context_reloads_active_user_from_database(session: Session) -> None:
             office_ids=frozenset({"office-a"}),
             warehouse_ids=frozenset(),
         )
+
+
+
+def test_typed_permission_enum_uses_existing_permission_contract() -> None:
+    from python_app.services.authorization import Permission
+
+    context = _context()
+    assert context.has_permission(Permission.ASSET_READ)
+    context.require_permission(Permission.ASSET_TRANSFER)
+    with pytest.raises(PermissionError):
+        context.require_permission(Permission.ASSET_DELETE)
+
+
+def test_context_office_helpers_reject_missing_and_out_of_scope_ids() -> None:
+    from python_app.services.authorization import Permission
+
+    context = _context()
+    context.require_offices(["office-a"], permission=Permission.ASSET_READ)
+    assert context.filter_offices(["office-a", "office-b"]) == ["office-a"]
+    with pytest.raises(PermissionError):
+        context.require_offices(["office-a", "office-b"], permission=Permission.ASSET_READ)
+    with pytest.raises(PermissionError):
+        context.require_office(None, permission=Permission.ASSET_READ)
+
+
+def test_context_warehouse_helper_rejects_unassigned_warehouse() -> None:
+    from python_app.services.authorization import Permission
+
+    with pytest.raises(PermissionError):
+        _context().require_warehouse("warehouse-b", permission=Permission.ASSET_READ)
