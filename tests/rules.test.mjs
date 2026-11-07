@@ -164,6 +164,16 @@ test('denies access for an inactive account with otherwise valid scope', async (
   await assertFails(getDoc(doc(db, 'assets', 'asset-a')));
 });
 
+test('Storage denies files whose parent asset does not exist', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await uploadBytes(ref(context.storage(), 'asset_documents/missing-parent/report.pdf'), new Uint8Array([1, 2, 3]), {
+      contentType: 'application/pdf',
+    });
+  });
+  const userStorage = env.authenticatedContext('scoped-user').storage();
+  await assertFails(getBytes(ref(userStorage, 'asset_documents/missing-parent/report.pdf')));
+});
+
 test('Storage access follows the linked asset office AND warehouse scope', async () => {
   await env.withSecurityRulesDisabled(async (context) => {
     const adminStorage = context.storage();
