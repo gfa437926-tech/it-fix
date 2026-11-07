@@ -317,7 +317,7 @@ export type UserPermission =
   | 'spareparts.read' | 'spareparts.manage'
   | 'documents.read' | 'documents.manage'
   | 'inventory.read' | 'inventory.manage'
-  | 'reports.read' | 'users.manage';
+  | 'reports.read';
 
 export interface Warehouse {
   id: string;
