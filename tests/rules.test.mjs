@@ -100,6 +100,38 @@ test('denies all scoped asset reads when both assignments are empty', async () =
   await assertFails(getDoc(doc(db, 'assets', 'asset-a')));
 });
 
+test('denies access when the permission is absent even if scope matches', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'users', 'scoped-user'), {
+      uid: 'scoped-user',
+      isActive: true,
+      role: 'it_manager',
+      accessControlEnabled: true,
+      officeIds: ['office-a'],
+      warehouseIds: ['warehouse-a'],
+      permissions: {},
+    });
+  });
+  const db = env.authenticatedContext('scoped-user').firestore();
+  await assertFails(getDoc(doc(db, 'assets', 'asset-a')));
+});
+
+test('denies access for an inactive account with otherwise valid scope', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'users', 'scoped-user'), {
+      uid: 'scoped-user',
+      isActive: false,
+      role: 'it_manager',
+      accessControlEnabled: true,
+      officeIds: ['office-a'],
+      warehouseIds: ['warehouse-a'],
+      permissions: { 'assets.read': true },
+    });
+  });
+  const db = env.authenticatedContext('scoped-user').firestore();
+  await assertFails(getDoc(doc(db, 'assets', 'asset-a')));
+});
+
 test('Storage access follows the linked asset office AND warehouse scope', async () => {
   await env.withSecurityRulesDisabled(async (context) => {
     const adminStorage = context.storage();
