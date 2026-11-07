@@ -71,7 +71,7 @@ export async function createManualUser(user: {
   if (!uid || !displayName || !email) {
     throw new Error('UID والاسم والبريد الإلكتروني حقول مطلوبة');
   }
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new Error('صيغة البريد الإلكتروني غير صحيحة');
   }
 
