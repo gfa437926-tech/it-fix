@@ -4,88 +4,258 @@
       "collectionGroup": "maintenance_records",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "officeId", "order": "ASCENDING" },
-        { "fieldPath": "reportedAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "officeId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "reportedAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "maintenance_records",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "warehouseId", "order": "ASCENDING" },
-        { "fieldPath": "reportedAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "warehouseId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "reportedAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "custody_cards",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "officeId", "order": "ASCENDING" },
-        { "fieldPath": "assignedAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "officeId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "assignedAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "custody_cards",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "warehouseId", "order": "ASCENDING" },
-        { "fieldPath": "assignedAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "warehouseId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "assignedAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "spare_parts",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "warehouseId", "order": "ASCENDING" },
-        { "fieldPath": "name", "order": "ASCENDING" }
+        {
+          "fieldPath": "warehouseId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "name",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "asset_movements",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "officeId", "order": "ASCENDING" },
-        { "fieldPath": "occurredAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "officeId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "occurredAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "asset_movements",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "warehouseId", "order": "ASCENDING" },
-        { "fieldPath": "occurredAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "warehouseId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "occurredAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "asset_documents",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "officeId", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "officeId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "asset_documents",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "warehouseId", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "warehouseId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "maintenance_parts",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "maintenanceId", "order": "ASCENDING" },
-        { "fieldPath": "officeId", "order": "ASCENDING" }
+        {
+          "fieldPath": "maintenanceId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "officeId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "maintenance_parts",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "maintenanceId", "order": "ASCENDING" },
-        { "fieldPath": "warehouseId", "order": "ASCENDING" }
+        {
+          "fieldPath": "maintenanceId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "warehouseId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "assets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "officeId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "warehouseId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "maintenance_records",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "officeId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "warehouseId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "reportedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "custody_cards",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "officeId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "warehouseId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "assignedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "asset_movements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "officeId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "warehouseId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "occurredAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "asset_documents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "officeId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "warehouseId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "maintenance_parts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "maintenanceId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "officeId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "warehouseId",
+          "order": "ASCENDING"
+        }
       ]
     }
   ],
