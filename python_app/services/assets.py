@@ -311,6 +311,85 @@ def retire_asset(session: Session, asset_id: str, reason: str, actor_name: str =
     return asset
 
 
+
+def create_asset_for_scope(
+    session: Session,
+    context: AuthorizationContext,
+    data: AssetInput,
+) -> Asset:
+    """Create an asset only inside an explicitly granted office."""
+    require_permission(context, "assets.create")
+    cleaned = validate_asset(data)
+    if not cleaned.office_id:
+        raise PermissionError("يجب تحديد مكتب مصرح به لتسجيل الأصل.")
+    require_permission(context, "assets.create")
+    if cleaned.office_id not in context.office_ids:
+        raise PermissionError("لا يمكن تسجيل الأصل خارج نطاق مكاتب حسابك.")
+    return create_asset(session, cleaned, actor_name=context.user.display_name)
+
+
+def update_asset_for_scope(
+    session: Session,
+    context: AuthorizationContext,
+    asset_id: str,
+    data: AssetInput,
+) -> Asset:
+    """Update an asset only when both its current and target offices are allowed."""
+    asset = session.get(Asset, asset_id)
+    if asset is None:
+        raise ValueError("الأصل المطلوب تعديله غير موجود.")
+    if asset.office_id not in context.office_ids:
+        raise PermissionError("الأصل الحالي خارج نطاق مكاتب حسابك.")
+    cleaned = validate_asset(data)
+    if cleaned.office_id != asset.office_id:
+        from .authorization import require_transfer_scope
+        require_transfer_scope(
+            context, asset.office_id, cleaned.office_id,
+            permission="assets.transfer",
+        )
+    else:
+        require_permission(context, "assets.update")
+    if not cleaned.office_id:
+        raise PermissionError("لا يمكن نقل الأصل إلى موقع غير محدد.")
+    return update_asset(session, asset_id, cleaned, actor_name=context.user.display_name)
+
+
+def transfer_asset_for_scope(
+    session: Session,
+    context: AuthorizationContext,
+    asset_id: str,
+    destination_office_id: str,
+    notes: str = "",
+) -> Asset:
+    asset = session.get(Asset, asset_id)
+    if asset is None:
+        raise ValueError("الأصل غير موجود.")
+    from .authorization import require_transfer_scope
+    require_transfer_scope(
+        context, asset.office_id, destination_office_id,
+        permission="assets.transfer",
+    )
+    return transfer_asset(
+        session, asset_id, destination_office_id, notes,
+        actor_name=context.user.display_name,
+    )
+
+
+def retire_asset_for_scope(
+    session: Session,
+    context: AuthorizationContext,
+    asset_id: str,
+    reason: str,
+) -> Asset:
+    asset = session.get(Asset, asset_id)
+    if asset is None:
+        raise ValueError("الأصل غير موجود.")
+    require_permission(context, "assets.retire")
+    if asset.office_id not in context.office_ids:
+        raise PermissionError("الأصل خارج نطاق مكاتب حسابك.")
+    return retire_asset(session, asset_id, reason, actor_name=context.user.display_name)
+
+
 def create_office(
     session: Session, name: str, building: str = "", department: str = "",
     room: str = "", manager: str = "", actor_name: str = "المسؤول",
