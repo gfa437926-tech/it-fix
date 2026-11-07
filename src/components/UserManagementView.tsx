@@ -433,7 +433,7 @@ export const UserManagementView: React.FC = () => {
               <button onClick={() => setAccessTarget(null)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
             </div>
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800 mb-5">
-              عند الحفظ سيتم تفعيل الصلاحيات المقيدة لهذا المستخدم، ولن يعود مسؤول تقنية المعلومات قادراً على الوصول الشامل تلقائياً. يجب تحديد مكتب أو مستودع واحد على الأقل.
+              عند الحفظ سيتم تفعيل الصلاحيات المقيدة لهذا المستخدم، ولن يعود مسؤول تقنية المعلومات قادراً على الوصول الشامل تلقائياً. يمكن ترك النطاقين فارغين لإيقاف وصول المستخدم إلى بيانات المكاتب والمستودعات مع إبقاء حسابه فعالاً.
             </div>
             <div className="grid md:grid-cols-2 gap-5">
               <section className="border border-slate-200 rounded-xl p-4">
@@ -515,7 +515,7 @@ export const UserManagementView: React.FC = () => {
             </section>
             <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
               <button onClick={() => setAccessTarget(null)} className="px-4 py-2 text-xs font-bold text-slate-600 rounded-xl hover:bg-slate-100">إلغاء</button>
-              <button onClick={saveAccess} disabled={accessSaving || (accessOfficeIds.length === 0 && accessWarehouseIds.length === 0)} className="px-5 py-2 text-xs font-bold bg-[#183B56] text-white rounded-xl disabled:opacity-50">
+              <button onClick={saveAccess} disabled={accessSaving} className="px-5 py-2 text-xs font-bold bg-[#183B56] text-white rounded-xl disabled:opacity-50">
                 {accessSaving ? 'جارٍ الحفظ...' : 'حفظ وتفعيل الصلاحيات المقيدة'}
               </button>
             </div>
