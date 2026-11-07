@@ -10,6 +10,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
+import { buildAssignedScopeConstraintGroups } from './scopedQueries';
 import { CustodyRecord, CustodyItem, UserProfile } from '../types';
 
 export async function saveOfficialCustodyCard(
@@ -108,17 +109,13 @@ export function watchCustodyCards(
 ) {
   const ref = collection(db, 'custody_cards');
   if (scope?.accessControlEnabled === true) {
-    const groups: { field: 'officeId' | 'warehouseId'; ids: string[] }[] = [];
-    const offices = [...new Set(scope.officeIds || [])].filter(Boolean);
-    const warehouses = [...new Set(scope.warehouseIds || [])].filter(Boolean);
-    for (let i = 0; i < offices.length; i += 30) groups.push({ field: 'officeId', ids: offices.slice(i, i + 30) });
-    for (let i = 0; i < warehouses.length; i += 30) groups.push({ field: 'warehouseId', ids: warehouses.slice(i, i + 30) });
+    const groups = buildAssignedScopeConstraintGroups(scope.officeIds || [], scope.warehouseIds || []);
     if (!groups.length) { onData([]); return () => undefined; }
     const snapshots = new Map<string, Map<string, CustodyRecord>>();
-    const unsubs = groups.map(({ field, ids }) => onSnapshot(
-      query(ref, where(field, 'in', ids), orderBy('assignedAt', 'desc')),
+    const unsubs = groups.map(({ key, constraints }) => onSnapshot(
+      query(ref, ...constraints, orderBy('assignedAt', 'desc')),
       (snapshot) => {
-        snapshots.set(field + ':' + ids.join(','), new Map(snapshot.docs.map((item) => [
+        snapshots.set(key, new Map(snapshot.docs.map((item) => [
           item.id, { id: item.id, ...item.data() } as CustodyRecord,
         ])));
         const merged = new Map<string, CustodyRecord>();
