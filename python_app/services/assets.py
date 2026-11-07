@@ -42,6 +42,12 @@ class DashboardSummary:
     active_offices: int
 
 
+def _transaction(session: Session):
+    # Scoped facades may load an entity before delegating to these services;
+    # use a savepoint in that case rather than failing on SQLAlchemy autobegin.
+    return session.begin_nested() if session.in_transaction() else session.begin()
+
+
 def normalize_serial(value: str | None) -> tuple[str | None, str | None]:
     serial = (value or "").strip().upper()
     return (serial or None, serial or None)
@@ -168,7 +174,7 @@ def create_asset(session: Session, data: AssetInput, actor_name: str = "المس
     cleaned = validate_asset(data)
     serial, serial_key = normalize_serial(cleaned.serial_number)
     try:
-        with session.begin():
+        with _transaction(session):
             office = _find_office(session, cleaned.office_id, cleaned.office_name)
             if serial_key and session.scalar(
                 select(Asset.id).where(Asset.serial_key == serial_key).limit(1)
@@ -207,7 +213,7 @@ def update_asset(session: Session, asset_id: str, data: AssetInput, actor_name: 
     cleaned = validate_asset(data)
     serial, serial_key = normalize_serial(cleaned.serial_number)
     try:
-        with session.begin():
+        with _transaction(session):
             office = _find_office(session, cleaned.office_id, cleaned.office_name)
             asset = session.get(Asset, asset_id)
             if asset is None:
@@ -258,7 +264,7 @@ def transfer_asset(
     session: Session, asset_id: str, destination_office_id: str,
     notes: str = "", actor_name: str = "المسؤول",
 ) -> Asset:
-    with session.begin():
+    with _transaction(session):
         asset = session.get(Asset, asset_id)
         destination = session.get(Office, destination_office_id)
         if asset is None:
@@ -291,7 +297,7 @@ def retire_asset(session: Session, asset_id: str, reason: str, actor_name: str =
     reason = reason.strip()
     if not reason:
         raise ValueError("يجب إدخال سبب الاستبعاد.")
-    with session.begin():
+    with _transaction(session):
         asset = session.get(Asset, asset_id)
         if asset is None:
             raise ValueError("الأصل غير موجود.")
