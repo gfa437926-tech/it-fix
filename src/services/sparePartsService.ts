@@ -8,6 +8,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
+import { buildAssignedScopeConstraintGroups } from './scopedQueries';
 import { SparePart, MaintenancePartUsage, UserProfile } from '../types';
 
 export function watchSpareParts(
@@ -48,17 +49,13 @@ export function watchMaintenanceUsages(
 ) {
   const ref = collection(db, 'maintenance_parts');
   if (scope?.accessControlEnabled === true) {
-    const groups: { field: 'officeId' | 'warehouseId'; ids: string[] }[] = [];
-    const offices = [...new Set(scope.officeIds || [])].filter(Boolean);
-    const warehouses = [...new Set(scope.warehouseIds || [])].filter(Boolean);
-    for (let i = 0; i < offices.length; i += 30) groups.push({ field: 'officeId', ids: offices.slice(i, i + 30) });
-    for (let i = 0; i < warehouses.length; i += 30) groups.push({ field: 'warehouseId', ids: warehouses.slice(i, i + 30) });
+    const groups = buildAssignedScopeConstraintGroups(scope.officeIds || [], scope.warehouseIds || []);
     if (!groups.length) { onData([]); return () => undefined; }
     const snapshots = new Map<string, Map<string, MaintenancePartUsage>>();
-    const unsubs = groups.map(({ field, ids }) => onSnapshot(
-      query(ref, where('maintenanceId', '==', maintenanceId), where(field, 'in', ids)),
+    const unsubs = groups.map(({ key, constraints }) => onSnapshot(
+      query(ref, where('maintenanceId', '==', maintenanceId), ...constraints),
       (snapshot) => {
-        snapshots.set(field + ':' + ids.join(','), new Map(snapshot.docs.map((item) => [
+        snapshots.set(key, new Map(snapshot.docs.map((item) => [
           item.id, { id: item.id, ...item.data() } as MaintenancePartUsage,
         ])));
         const merged = new Map<string, MaintenancePartUsage>();
