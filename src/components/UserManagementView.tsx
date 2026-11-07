@@ -505,6 +505,7 @@ export const UserManagementView: React.FC = () => {
                   ['spareparts.read', 'عرض قطع الغيار'], ['spareparts.manage', 'إدارة مخزون قطع الغيار'],
                   ['documents.read', 'عرض المستندات'], ['documents.manage', 'رفع وإدارة المستندات'],
                   ['inventory.read', 'عرض سجل الجرد'], ['inventory.manage', 'تنفيذ عمليات الجرد'],
+                  ['reports.read', 'عرض التقارير والتصدير'],
                 ] as [UserPermission, string][]).map(([key, label]) => (
                   <label key={key} className="flex items-center gap-2 text-xs p-2 rounded-lg bg-slate-50">
                     <input type="checkbox" checked={accessPermissions[key] === true} onChange={(e) => setAccessPermissions((old) => ({ ...old, [key]: e.target.checked }))} />
