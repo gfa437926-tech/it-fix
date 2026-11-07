@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from ..models import Asset, AssetMovement, AuditLog, Office, utc_now
+from .authorization import AuthorizationContext, require_permission
 
 ASSET_CATEGORIES = {
     "desktop", "laptop", "monitor", "printer", "scanner",
@@ -114,6 +115,42 @@ def _record_movement(
 def list_assets(session: Session, search: str = "", status: str = "all") -> list[Asset]:
     query = select(Asset).options(joinedload(Asset.office)).order_by(Asset.brand, Asset.model)
     term = search.strip()
+    if term:
+        pattern = f"%{term}%"
+        query = query.where(or_(
+            Asset.brand.ilike(pattern),
+            Asset.model.ilike(pattern),
+            Asset.serial_number.ilike(pattern),
+            Asset.office_name.ilike(pattern),
+        ))
+    if status != "all":
+        query = query.where(Asset.status == status)
+    return list(session.scalars(query).unique().all())
+
+
+def list_assets_for_scope(
+    session: Session,
+    context: AuthorizationContext,
+    search: str = "",
+    status: str = "all",
+) -> list[Asset]:
+    """List only assets assigned to offices in a trusted authorization context.
+
+    Assets without an office are intentionally excluded: until warehouse
+    grants are persisted, a UI selection must not be used to infer warehouse
+    access or expose unassigned inventory.
+    """
+    require_permission(context, "assets.read")
+    if not context.office_ids:
+        raise PermissionError("لا توجد مكاتب مسموح بها لهذا الحساب.")
+
+    query = (
+        select(Asset)
+        .options(joinedload(Asset.office))
+        .where(Asset.office_id.in_(context.office_ids))
+        .order_by(Asset.brand, Asset.model)
+    )
+    term = (search or "").strip()
     if term:
         pattern = f"%{term}%"
         query = query.where(or_(
