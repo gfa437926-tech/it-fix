@@ -208,3 +208,93 @@ test('Storage access follows the linked asset office AND warehouse scope', async
   await assertSucceeds(getBytes(ref(userStorage, 'asset_documents/asset-a/report.pdf')));
   await assertFails(getBytes(ref(userStorage, 'asset_documents/asset-wrong-warehouse/report.pdf')));
 });
+
+test('custody reads require the custody permission and the complete assigned scope', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'users', 'scoped-user'), {
+      uid: 'scoped-user', isActive: true, role: 'it_manager', accessControlEnabled: true,
+      officeIds: ['office-a'], warehouseIds: ['warehouse-a'],
+      permissions: { 'custody.read': true },
+    });
+    await setDoc(doc(db, 'custody_cards', 'custody-valid'), {
+      officeId: 'office-a', warehouseId: 'warehouse-a',
+    });
+    await setDoc(doc(db, 'custody_cards', 'custody-wrong-warehouse'), {
+      officeId: 'office-a', warehouseId: 'warehouse-b',
+    });
+  });
+  const db = env.authenticatedContext('scoped-user').firestore();
+  await assertSucceeds(getDoc(doc(db, 'custody_cards', 'custody-valid')));
+  await assertFails(getDoc(doc(db, 'custody_cards', 'custody-wrong-warehouse')));
+});
+
+test('maintenance reads require the maintenance permission and assigned office plus warehouse', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'users', 'scoped-user'), {
+      uid: 'scoped-user', isActive: true, role: 'it_manager', accessControlEnabled: true,
+      officeIds: ['office-a'], warehouseIds: ['warehouse-a'],
+      permissions: { 'maintenance.read': true },
+    });
+    await setDoc(doc(db, 'maintenance_records', 'maintenance-valid'), {
+      officeId: 'office-a', warehouseId: 'warehouse-a',
+    });
+    await setDoc(doc(db, 'maintenance_records', 'maintenance-outside'), {
+      officeId: 'office-a', warehouseId: 'warehouse-b',
+    });
+  });
+  const db = env.authenticatedContext('scoped-user').firestore();
+  await assertSucceeds(getDoc(doc(db, 'maintenance_records', 'maintenance-valid')));
+  await assertFails(getDoc(doc(db, 'maintenance_records', 'maintenance-outside')));
+});
+
+test('spare-parts access is limited to assigned warehouses', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'users', 'scoped-user'), {
+      uid: 'scoped-user', isActive: true, role: 'it_manager', accessControlEnabled: true,
+      officeIds: [], warehouseIds: ['warehouse-a'],
+      permissions: { 'spareparts.read': true },
+    });
+    await setDoc(doc(db, 'spare_parts', 'part-valid'), { warehouseId: 'warehouse-a' });
+    await setDoc(doc(db, 'spare_parts', 'part-outside'), { warehouseId: 'warehouse-b' });
+  });
+  const db = env.authenticatedContext('scoped-user').firestore();
+  await assertSucceeds(getDoc(doc(db, 'spare_parts', 'part-valid')));
+  await assertFails(getDoc(doc(db, 'spare_parts', 'part-outside')));
+});
+
+test('asset-document metadata cannot be read from another assigned scope', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore();
+    await setDoc(doc(db, 'users', 'scoped-user'), {
+      uid: 'scoped-user', isActive: true, role: 'it_manager', accessControlEnabled: true,
+      officeIds: ['office-a'], warehouseIds: ['warehouse-a'],
+      permissions: { 'documents.read': true },
+    });
+    await setDoc(doc(db, 'asset_documents', 'document-valid'), {
+      officeId: 'office-a', warehouseId: 'warehouse-a', assetId: 'asset-a',
+    });
+    await setDoc(doc(db, 'asset_documents', 'document-outside'), {
+      officeId: 'office-a', warehouseId: 'warehouse-b', assetId: 'asset-b',
+    });
+  });
+  const db = env.authenticatedContext('scoped-user').firestore();
+  await assertSucceeds(getDoc(doc(db, 'asset_documents', 'document-valid')));
+  await assertFails(getDoc(doc(db, 'asset_documents', 'document-outside')));
+});
+
+test('empty scope also denies Storage access even when the document permission is enabled', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'users', 'scoped-user'), {
+      uid: 'scoped-user', isActive: true, role: 'it_manager', accessControlEnabled: true,
+      officeIds: [], warehouseIds: [], permissions: { 'documents.read': true },
+    });
+    await uploadBytes(ref(context.storage(), 'asset_documents/asset-a/locked.pdf'), new Uint8Array([1, 2, 3]), {
+      contentType: 'application/pdf',
+    });
+  });
+  const userStorage = env.authenticatedContext('scoped-user').storage();
+  await assertFails(getBytes(ref(userStorage, 'asset_documents/asset-a/locked.pdf')));
+});
