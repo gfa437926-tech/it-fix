@@ -257,6 +257,28 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "asset_documents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "assetId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "officeId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "warehouseId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []
