@@ -7,7 +7,6 @@ import {
   runTransaction,
   query,
   orderBy,
-  where,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { buildAssignedScopeConstraintGroups } from './scopedQueries';
