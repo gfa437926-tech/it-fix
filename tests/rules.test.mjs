@@ -6,7 +6,7 @@ import {
   assertFails,
   assertSucceeds,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import { ref, getBytes, uploadBytes } from 'firebase/storage';
 
 const projectId = 'demo-itfix-rbac';
@@ -61,6 +61,22 @@ test('allows reads when both office and warehouse are assigned', async () => {
 test('denies a warehouse outside the assigned warehouse even in the assigned office', async () => {
   const db = env.authenticatedContext('scoped-user').firestore();
   await assertFails(getDoc(doc(db, 'assets', 'asset-wrong-warehouse')));
+});
+
+test('allows list queries only when both assigned scope predicates are present', async () => {
+  const db = env.authenticatedContext('scoped-user').firestore();
+  const safeQuery = query(
+    collection(db, 'assets'),
+    where('officeId', 'in', ['office-a']),
+    where('warehouseId', 'in', ['warehouse-a']),
+  );
+  const result = await assertSucceeds(getDocs(safeQuery));
+  assert.equal(result.size, 1);
+  const incompleteQuery = query(
+    collection(db, 'assets'),
+    where('officeId', 'in', ['office-a']),
+  );
+  await assertFails(getDocs(incompleteQuery));
 });
 
 test('denies an office outside the assigned office even in the assigned warehouse', async () => {
