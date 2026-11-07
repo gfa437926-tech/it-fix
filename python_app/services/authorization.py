@@ -31,6 +31,20 @@ class Permission(str, Enum):
     MAINTENANCE_UPDATE = "maintenance.update"
     SPARE_READ = "spares.read"
     SPARE_MANAGE = "spares.manage"
+    SPARE_CONSUME = "spares.consume"
+    PURCHASE_READ = "purchases.read"
+    PURCHASE_CREATE = "purchases.create"
+    PURCHASE_UPDATE = "purchases.update"
+    ATTACHMENT_READ = "attachments.read"
+    ATTACHMENT_UPLOAD = "attachments.upload"
+    ATTACHMENT_DELETE = "attachments.delete"
+    REPORT_VIEW = "reports.view"
+    REPORT_EXPORT = "reports.export"
+    AUDIT_VIEW = "audit.view"
+    USER_MANAGE = "users.manage"
+    WAREHOUSE_MANAGE = "warehouses.manage"
+    BACKUP = "system.backup"
+    SYSTEM_SETTINGS = "system.settings"
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +62,11 @@ class AuthorizationContext:
     warehouse_ids: FrozenSet[str]
 
     def has_permission(self, permission: str | Permission) -> bool:
-        return permission.value in self.permissions if isinstance(permission, Permission) else permission in self.permissions
+        # Never authorize work for a disabled account, even through a stale context.
+        if not self.user.is_active:
+            return False
+        value = permission.value if isinstance(permission, Permission) else permission
+        return bool(value) and value in self.permissions
 
     def require_permission(self, permission: str | Permission) -> None:
         require_permission(self, permission.value if isinstance(permission, Permission) else permission)
@@ -73,6 +91,8 @@ class AuthorizationContext:
 
     def filter_offices(self, office_ids: Iterable[str]) -> list[str]:
         """Return only IDs in the trusted scope; never infer scope from UI state."""
+        if not self.user.is_active:
+            return []
         allowed = self.office_ids
         return [office_id for office_id in office_ids if office_id in allowed]
 
@@ -96,7 +116,7 @@ def build_authorization_context(
 
 
 def require_permission(context: AuthorizationContext, permission: str) -> None:
-    if not permission or permission not in context.permissions:
+    if not context.has_permission(permission):
         raise PermissionError("ليس لديك الإذن لتنفيذ هذه العملية.")
 
 
