@@ -12,13 +12,17 @@ from python_app.models import Asset, AssetMovement, AuditLog, Base, Office
 from python_app.services.assets import (
     AssetInput,
     create_asset,
+    create_asset_for_scope,
     create_office,
     get_dashboard_summary,
     list_assets,
     list_assets_for_scope,
     retire_asset,
+    retire_asset_for_scope,
     transfer_asset,
+    transfer_asset_for_scope,
     update_asset,
+    update_asset_for_scope,
 )
 from python_app.models import AppUser
 from python_app.services.authorization import AuthorizationContext
@@ -265,3 +269,74 @@ def test_scoped_asset_list_requires_read_permission(session: Session) -> None:
     )
     with pytest.raises(PermissionError):
         list_assets_for_scope(session, context)
+
+
+def _scoped_context(office_ids: set[str], permissions: set[str]) -> AuthorizationContext:
+    return AuthorizationContext(
+        AppUser(
+            id="scoped-actor", username="scoped-actor", display_name="مستخدم مخول",
+            password_hash="unused", role="it_manager", is_active=True,
+        ),
+        frozenset(permissions), frozenset(office_ids), frozenset(),
+    )
+
+
+def test_scoped_create_rejects_office_outside_grants(session: Session) -> None:
+    allowed = create_office(session, "إنشاء مسموح")
+    denied = create_office(session, "إنشاء ممنوع", building="مبنى آخر")
+    context = _scoped_context({allowed.id}, {"assets.create"})
+    with pytest.raises(PermissionError, match="خارج نطاق"):
+        create_asset_for_scope(
+            session, context,
+            AssetInput("laptop", "HP", "Blocked", "CREATE-DENIED", office_id=denied.id),
+        )
+    assert session.scalar(select(Asset.id).where(Asset.serial_key == "CREATE-DENIED")) is None
+
+
+def test_scoped_create_and_update_require_permissions_and_scope(session: Session) -> None:
+    office = create_office(session, "إنشاء وتعديل")
+    other = create_office(session, "مكتب آخر", building="مبنى آخر")
+    context = _scoped_context({office.id}, {"assets.create", "assets.update"})
+    asset = create_asset_for_scope(
+        session, context,
+        AssetInput("laptop", "HP", "Initial", "SCOPED-UPDATE", office_id=office.id),
+    )
+    updated = update_asset_for_scope(
+        session, context, asset.id,
+        AssetInput("laptop", "HP", "Updated", "SCOPED-UPDATE", office_id=office.id),
+    )
+    assert updated.model == "Updated"
+
+    with pytest.raises(PermissionError):
+        update_asset_for_scope(
+            session, context, asset.id,
+            AssetInput("laptop", "HP", "Move denied", "SCOPED-UPDATE", office_id=other.id),
+        )
+    session.refresh(asset)
+    assert asset.office_id == office.id
+
+
+def test_scoped_transfer_checks_both_offices_and_retirement_permission(session: Session) -> None:
+    source = create_office(session, "مصدر النقل")
+    destination = create_office(session, "وجهة النقل", building="مبنى آخر")
+    asset = create_asset(
+        session, AssetInput("laptop", "Lenovo", "T", "SCOPED-TRANSFER", office_id=source.id)
+    )
+    source_only = _scoped_context({source.id}, {"assets.transfer", "assets.retire"})
+    with pytest.raises(PermissionError):
+        transfer_asset_for_scope(session, source_only, asset.id, destination.id)
+    session.refresh(asset)
+    assert asset.office_id == source.id
+
+    both = _scoped_context(
+        {source.id, destination.id}, {"assets.transfer", "assets.retire"}
+    )
+    transferred = transfer_asset_for_scope(session, both, asset.id, destination.id)
+    assert transferred.office_id == destination.id
+
+    no_retire = _scoped_context({destination.id}, {"assets.read"})
+    with pytest.raises(PermissionError):
+        retire_asset_for_scope(session, no_retire, asset.id, "سبب")
+    assert retire_asset_for_scope(
+        session, both, asset.id, "تالف وغير قابل للإصلاح"
+    ).status == "retired"
