@@ -85,9 +85,13 @@ test('denies all scoped asset reads when both assignments are empty', async () =
 });
 
 test('Storage access follows the linked asset office AND warehouse scope', async () => {
-  const adminStorage = env.withSecurityRulesDisabled((context) => context.storage());
-  await uploadBytes(ref(adminStorage, 'asset_documents/asset-a/report.pdf'), new Uint8Array([1, 2, 3]), {
-    contentType: 'application/pdf',
+  await env.withSecurityRulesDisabled(async (context) => {
+    const adminStorage = context.storage();
+    for (const assetId of ['asset-a', 'asset-wrong-warehouse']) {
+      await uploadBytes(ref(adminStorage, `asset_documents/${assetId}/report.pdf`), new Uint8Array([1, 2, 3]), {
+        contentType: 'application/pdf',
+      });
+    }
   });
   const userStorage = env.authenticatedContext('scoped-user').storage();
   await assertSucceeds(getBytes(ref(userStorage, 'asset_documents/asset-a/report.pdf')));
