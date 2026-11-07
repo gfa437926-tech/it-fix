@@ -70,7 +70,7 @@ def test_admin_baseline_is_database_scoped_to_active_offices(session: Session) -
     assert context.warehouse_ids == frozenset()
 
 
-test_non_admin_role_receives_no_implicit_permissions_or_scopes(session: Session) -> None:
+def test_non_admin_role_receives_no_implicit_permissions_or_scopes(session: Session) -> None:
     # The current database CHECK constraint intentionally supports only admin/it_manager.
     # Proposed granular roles remain design-only until an approved schema migration.
     actor = _user("it_manager")
