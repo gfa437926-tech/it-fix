@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, handleFirestoreError, OperationType } from '../firebase';
+import { buildAssignedScopeConstraintGroups } from './scopedQueries';
 import { AssetDocument, DocumentType, UserProfile } from '../types';
 
 export function watchAssetDocuments(
@@ -22,21 +23,17 @@ export function watchAssetDocuments(
 ) {
   const ref = collection(db, 'asset_documents');
   if (scope?.accessControlEnabled === true) {
-    const groups: { field: 'officeId' | 'warehouseId'; ids: string[] }[] = [];
-    const offices = [...new Set(scope.officeIds || [])].filter(Boolean);
-    const warehouses = [...new Set(scope.warehouseIds || [])].filter(Boolean);
-    for (let i = 0; i < offices.length; i += 30) groups.push({ field: 'officeId', ids: offices.slice(i, i + 30) });
-    for (let i = 0; i < warehouses.length; i += 30) groups.push({ field: 'warehouseId', ids: warehouses.slice(i, i + 30) });
+    const groups = buildAssignedScopeConstraintGroups(scope.officeIds || [], scope.warehouseIds || []);
     if (!groups.length) { onData?.([]); return () => undefined; }
     const snapshots = new Map<string, Map<string, AssetDocument>>();
-    const unsubs = groups.map(({ field, ids }) => {
-      const constraints: QueryConstraint[] = [where(field, 'in', ids)];
+    const unsubs = groups.map(({ key, constraints: scopeConstraints }) => {
+      const constraints: QueryConstraint[] = [...scopeConstraints];
       if (assetId) constraints.push(where('assetId', '==', assetId));
       constraints.push(orderBy('createdAt', 'desc'));
       return onSnapshot(
         query(ref, ...constraints),
         (snapshot) => {
-          snapshots.set(field + ':' + ids.join(','), new Map(snapshot.docs.map((item) => [
+          snapshots.set(key, new Map(snapshot.docs.map((item) => [
             item.id, { id: item.id, ...item.data() } as AssetDocument,
           ])));
           const merged = new Map<string, AssetDocument>();
