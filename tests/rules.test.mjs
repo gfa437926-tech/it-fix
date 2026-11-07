@@ -298,3 +298,24 @@ test('empty scope also denies Storage access even when the document permission i
   const userStorage = env.authenticatedContext('scoped-user').storage();
   await assertFails(getBytes(ref(userStorage, 'asset_documents/asset-a/locked.pdf')));
 });
+
+test('a profile role named admin does not grant controller privileges', async () => {
+  await env.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'users', 'scoped-user'), {
+      uid: 'scoped-user', isActive: true, role: 'admin', accessControlEnabled: false,
+      officeIds: [], warehouseIds: [], permissions: {},
+    });
+  });
+  const db = env.authenticatedContext('scoped-user').firestore();
+  await assertFails(getDoc(doc(db, 'assets', 'asset-a')));
+  await assertFails(getDocs(collection(db, 'users')));
+});
+
+test('a user cannot promote their own profile by changing role or permissions', async () => {
+  const db = env.authenticatedContext('scoped-user').firestore();
+  await assertFails(setDoc(doc(db, 'users', 'scoped-user'), {
+    uid: 'scoped-user', isActive: true, role: 'admin', accessControlEnabled: false,
+    officeIds: ['office-a'], warehouseIds: ['warehouse-a'],
+    permissions: { 'assets.delete': true },
+  }));
+});
