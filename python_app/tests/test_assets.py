@@ -15,10 +15,13 @@ from python_app.services.assets import (
     create_office,
     get_dashboard_summary,
     list_assets,
+    list_assets_for_scope,
     retire_asset,
     transfer_asset,
     update_asset,
 )
+from python_app.models import AppUser
+from python_app.services.authorization import AuthorizationContext
 from python_app.services.excel_service import (
     export_assets_to_excel,
     import_assets_from_excel,
@@ -211,3 +214,54 @@ def test_update_asset_cannot_bypass_custody_or_maintenance_status_workflows(
             AssetMovement.movement_type == "assigned",
         )
     ) is None
+
+
+
+def test_scoped_asset_list_excludes_other_offices_and_unassigned_assets(
+    session: Session,
+) -> None:
+    allowed = create_office(session, "المكتب المسموح")
+    forbidden = create_office(session, "المكتب غير المسموح", building="مبنى آخر")
+    visible = create_asset(
+        session, AssetInput("laptop", "HP", "Visible", "SCOPE-1", office_id=allowed.id)
+    )
+    create_asset(
+        session, AssetInput("desktop", "Dell", "Hidden", "SCOPE-2", office_id=forbidden.id)
+    )
+    create_asset(session, AssetInput("monitor", "AOC", "Unassigned", "SCOPE-3"))
+
+    actor = AppUser(
+        id="scope-user", username="scope-user", display_name="مستخدم نطاق",
+        password_hash="unused", role="it_manager", is_active=True,
+    )
+    context = AuthorizationContext(
+        actor, frozenset({"assets.read"}), frozenset({allowed.id}), frozenset()
+    )
+
+    results = list_assets_for_scope(session, context)
+    assert [asset.id for asset in results] == [visible.id]
+
+
+def test_scoped_asset_list_denies_empty_office_scope(session: Session) -> None:
+    context = AuthorizationContext(
+        AppUser(
+            id="empty-user", username="empty-user", display_name="بلا نطاق",
+            password_hash="unused", role="it_manager", is_active=True,
+        ),
+        frozenset({"assets.read"}), frozenset(), frozenset(),
+    )
+    with pytest.raises(PermissionError, match="لا توجد مكاتب"):
+        list_assets_for_scope(session, context)
+
+
+def test_scoped_asset_list_requires_read_permission(session: Session) -> None:
+    office = create_office(session, "مكتب القراءة")
+    context = AuthorizationContext(
+        AppUser(
+            id="no-read-user", username="no-read-user", display_name="بلا إذن",
+            password_hash="unused", role="it_manager", is_active=True,
+        ),
+        frozenset(), frozenset({office.id}), frozenset(),
+    )
+    with pytest.raises(PermissionError):
+        list_assets_for_scope(session, context)
