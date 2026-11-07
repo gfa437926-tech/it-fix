@@ -2,40 +2,55 @@ import {
   collection,
   doc,
   onSnapshot,
-  setDoc,
   deleteDoc,
   query,
   orderBy,
   where,
+  getDoc,
+  runTransaction,
+  QueryConstraint,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, handleFirestoreError, OperationType } from '../firebase';
-import { AssetDocument, DocumentType } from '../types';
+import { buildAssignedScopeConstraintGroups } from './scopedQueries';
+import { AssetDocument, DocumentType, UserProfile } from '../types';
 
 export function watchAssetDocuments(
   assetId?: string,
   onData?: (docs: AssetDocument[]) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  scope?: UserProfile | null
 ) {
-  const colRef = collection(db, 'asset_documents');
+  const ref = collection(db, 'asset_documents');
+  if (scope?.accessControlEnabled === true) {
+    const groups = buildAssignedScopeConstraintGroups(scope.officeIds || [], scope.warehouseIds || []);
+    if (!groups.length) { onData?.([]); return () => undefined; }
+    const snapshots = new Map<string, Map<string, AssetDocument>>();
+    const unsubs = groups.map(({ key, constraints: scopeConstraints }) => {
+      const constraints: QueryConstraint[] = [...scopeConstraints];
+      if (assetId) constraints.push(where('assetId', '==', assetId));
+      constraints.push(orderBy('createdAt', 'desc'));
+      return onSnapshot(
+        query(ref, ...constraints),
+        (snapshot) => {
+          snapshots.set(key, new Map(snapshot.docs.map((item) => [
+            item.id, { id: item.id, ...item.data() } as AssetDocument,
+          ])));
+          const merged = new Map<string, AssetDocument>();
+          snapshots.forEach((items) => items.forEach((document, id) => merged.set(id, document)));
+          onData?.([...merged.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+        },
+        (error) => { handleFirestoreError(error, OperationType.GET, 'asset_documents'); onError?.(error as Error); }
+      );
+    });
+    return () => unsubs.forEach((unsubscribe) => unsubscribe());
+  }
   const q = assetId
-    ? query(colRef, where('assetId', '==', assetId))
-    : query(colRef, orderBy('createdAt', 'desc'));
-
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const docs = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      })) as AssetDocument[];
-      onData?.(docs);
-    },
-    (error) => {
-      handleFirestoreError(error, OperationType.GET, 'asset_documents');
-      onError?.(error as Error);
-    }
-  );
+    ? query(ref, where('assetId', '==', assetId))
+    : query(ref, orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snapshot) => {
+    onData?.(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as AssetDocument[]);
+  }, (error) => { handleFirestoreError(error, OperationType.GET, 'asset_documents'); onError?.(error as Error); });
 }
 
 export async function uploadAssetDocument(
@@ -50,6 +65,8 @@ export async function uploadAssetDocument(
   let downloadUrl = '';
 
   try {
+    const assetSnap = await getDoc(doc(db, 'assets', assetId));
+    if (!assetSnap.exists()) throw new Error('الأصل المرتبط بالمستند غير موجود');
     try {
       const storageRef = ref(storage, storagePath);
       const snapshot = await uploadBytes(storageRef, file, {
@@ -66,21 +83,33 @@ export async function uploadAssetDocument(
       });
     }
 
-    const docRecord: AssetDocument = {
-      id: docId,
-      assetId,
-      purchaseRecordId: purchaseRecordId || '',
-      fileName: file.name,
-      documentType,
-      storagePath,
-      contentType: file.type || 'application/octet-stream',
-      sizeBytes: file.size,
-      uploadedBy,
-      createdAt: new Date().toISOString(),
-      downloadUrl,
-    };
+    // Read the asset and write its document metadata in one transaction.
+    // If a transfer commits while the file is uploading, Firestore retries this
+    // transaction and the document receives the asset's new scope, not stale IDs.
+    await runTransaction(db, async (transaction) => {
+      const currentAssetSnap = await transaction.get(doc(db, 'assets', assetId));
+      if (!currentAssetSnap.exists()) {
+        throw new Error('الأصل المرتبط بالمستند لم يعد موجوداً');
+      }
+      const currentAsset = currentAssetSnap.data();
+      const docRecord: AssetDocument = {
+        id: docId,
+        assetId,
+        officeId: currentAsset.officeId || '',
+        warehouseId: currentAsset.warehouseId || '',
+        purchaseRecordId: purchaseRecordId || '',
+        fileName: file.name,
+        documentType,
+        storagePath,
+        contentType: file.type || 'application/octet-stream',
+        sizeBytes: file.size,
+        uploadedBy,
+        createdAt: new Date().toISOString(),
+        downloadUrl,
+      };
 
-    await setDoc(doc(db, 'asset_documents', docId), docRecord);
+      transaction.set(doc(db, 'asset_documents', docId), docRecord);
+    });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `asset_documents/${docId}`);
   }

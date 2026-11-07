@@ -2,14 +2,14 @@ import {
   collection,
   doc,
   onSnapshot,
-  setDoc,
+  runTransaction,
   updateDoc,
   deleteDoc,
   query,
   orderBy,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { UserProfile } from '../types';
+import { AccessProfile, ACCESS_PROFILE_PRESETS, UserPermission, UserProfile } from '../types';
 
 export function watchUsers(
   onData: (users: UserProfile[]) => void,
@@ -65,13 +65,92 @@ export async function createManualUser(user: {
   role: 'admin' | 'it_manager';
   isActive: boolean;
 }) {
-  const ref = doc(db, 'users', user.uid);
+  const uid = user.uid.trim();
+  const displayName = user.displayName.trim();
+  const email = user.email.trim().toLowerCase();
+  if (!uid || !displayName || !email) {
+    throw new Error('UID والاسم والبريد الإلكتروني حقول مطلوبة');
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('صيغة البريد الإلكتروني غير صحيحة');
+  }
+
+  const ref = doc(db, 'users', uid);
   try {
-    await setDoc(ref, {
-      ...user,
-      createdAt: new Date().toISOString(),
+    await runTransaction(db, async (transaction) => {
+      const existing = await transaction.get(ref);
+      if (existing.exists()) {
+        throw new Error('يوجد ملف مستخدم بهذا UID بالفعل؛ لم يتم استبدال بياناته');
+      }
+      const now = new Date().toISOString();
+      transaction.set(ref, {
+        uid,
+        displayName,
+        email,
+        role: user.role,
+        isActive: user.isActive,
+        // Newly provisioned accounts are least-privilege until explicitly scoped.
+        accessControlEnabled: true,
+        permissions: {},
+        officeIds: [],
+        warehouseIds: [],
+        createdAt: now,
+        updatedAt: now,
+      });
     });
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
+    if (error instanceof Error && error.message.includes('يوجد ملف مستخدم')) throw error;
+    handleFirestoreError(error, OperationType.WRITE, `users/${uid}`);
   }
 }
+
+/**
+ * Enable or update explicit RBAC scope for a user. Enabling this flag causes
+ * Firestore rules to stop applying the legacy IT-manager fallback immediately.
+ */
+export async function updateUserAccessScope(
+  uid: string,
+  access: {
+    officeIds: string[];
+    warehouseIds: string[];
+    accessProfile: AccessProfile;
+    permissions: Partial<Record<UserPermission, boolean>>;
+  }
+) {
+  const officeIds = [...new Set(access.officeIds.map((id) => id.trim()).filter(Boolean))];
+  const warehouseIds = [...new Set(access.warehouseIds.map((id) => id.trim()).filter(Boolean))];
+  const selectedPermissions = Object.keys(access.permissions).length > 0
+    ? access.permissions
+    : access.accessProfile !== 'custom'
+      ? Object.fromEntries(ACCESS_PROFILE_PRESETS[access.accessProfile].map((permission) => [permission, true]))
+      : {};
+  const permissions = Object.fromEntries(
+    Object.entries(selectedPermissions).filter(([key, value]) =>
+      value === true && [
+        'assets.read', 'assets.create', 'assets.update', 'assets.delete',
+        'offices.read', 'offices.manage', 'warehouses.read', 'warehouses.manage',
+        'custody.read', 'custody.manage', 'maintenance.read', 'maintenance.manage',
+        'spareparts.read', 'spareparts.manage', 'documents.read', 'documents.manage', 'inventory.read', 'inventory.manage', 'reports.read',
+      ].includes(key)
+    )
+  );
+
+  // An empty scope is a valid lock-down state: the account remains active,
+  // but Firestore/Storage rules deny access to all office/warehouse-scoped data.
+
+  const ref = doc(db, 'users', uid);
+  try {
+    await updateDoc(ref, {
+      accessControlEnabled: true,
+      accessProfile: access.accessProfile,
+      officeIds,
+      warehouseIds,
+      permissions,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+    throw error;
+  }
+}
+

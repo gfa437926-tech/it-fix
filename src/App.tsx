@@ -30,9 +30,12 @@ import {
   MaintenanceRecord,
   SparePart,
   AssetMovement,
+  Warehouse,
+  UserPermission,
 } from './types';
 import { watchAssets } from './services/assetService';
 import { watchOffices, saveOffice } from './services/officeService';
+import { watchWarehouses } from './services/warehouseService';
 import { watchCustodyCards, saveOfficialCustodyCard } from './services/custodyService';
 import { watchMaintenanceRecords } from './services/maintenanceService';
 import { watchSpareParts, addSparePart } from './services/sparePartsService';
@@ -40,9 +43,34 @@ import { watchAssetMovements } from './services/movementService';
 import { ShieldAlert, LogOut, HardDrive, Loader2 } from 'lucide-react';
 
 function MainApp() {
-  const { user, profile, loading: authLoading, signOut } = useAuth();
+  const { user, profile, loading: authLoading, signOut, isPrimaryController } = useAuth();
 
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
+
+  const tabPermissions: Partial<Record<NavTab, UserPermission[]>> = {
+    assets: ['assets.read', 'assets.create', 'assets.update', 'assets.delete'],
+    custody: ['custody.read', 'custody.manage'],
+    import: ['assets.create', 'assets.update'],
+    maintenance: ['maintenance.read', 'maintenance.manage'],
+    'service-history': ['maintenance.read', 'maintenance.manage', 'assets.read'],
+    'spare-parts': ['spareparts.read', 'spareparts.manage'],
+    offices: ['offices.read', 'offices.manage', 'assets.read'],
+    movements: ['assets.read', 'assets.update', 'custody.read', 'custody.manage', 'maintenance.read', 'maintenance.manage'],
+    documents: ['documents.read', 'documents.manage'],
+    reports: ['reports.read'],
+  };
+
+  const navigateToTab = (tab: NavTab) => {
+    if (profile?.accessControlEnabled === true) {
+      if (tab === 'google-sheets' || tab === 'users') {
+        if (!isPrimaryController) return;
+      }
+      const required = tabPermissions[tab];
+      if (required && !required.some((permission) => profile.permissions?.[permission] === true)) return;
+    }
+    setCurrentTab(tab);
+  };
+
 
   // Native Android back navigation: return to the dashboard before exiting.
   useEffect(() => {
@@ -73,6 +101,7 @@ function MainApp() {
   // Real-time collections
   const [assets, setAssets] = useState<Asset[]>([]);
   const [offices, setOffices] = useState<Office[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [custodyCards, setCustodyCards] = useState<CustodyRecord[]>([]);
   const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>([]);
   const [spareParts, setSpareParts] = useState<SparePart[]>([]);
@@ -90,7 +119,7 @@ function MainApp() {
 
   // Listen to Google Sheet connection settings
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isPrimaryController) return;
     const unsub = onSnapshot(
       doc(db, 'system_settings', 'google_sheets'),
       (snap) => {
@@ -101,7 +130,7 @@ function MainApp() {
       }
     );
     return () => unsub();
-  }, [user]);
+  }, [user, isPrimaryController]);
 
   // Listeners
   useEffect(() => {
@@ -109,7 +138,7 @@ function MainApp() {
 
     const unsubs: (() => void)[] = [];
 
-    unsubs.push(watchAssets((data) => setAssets(data)));
+    unsubs.push(watchAssets((data) => setAssets(data), undefined, profile));
     unsubs.push(
       watchOffices(async (data) => {
         setOffices(data);
@@ -143,8 +172,9 @@ function MainApp() {
             console.error('Seed office err:', e);
           }
         }
-      })
+      }, undefined, profile)
     );
+    unsubs.push(watchWarehouses((data) => setWarehouses(data), undefined, profile));
     unsubs.push(
       watchCustodyCards(async (data) => {
         setCustodyCards(data);
@@ -230,9 +260,9 @@ function MainApp() {
             console.error('Seed custody err:', e);
           }
         }
-      })
+      }, undefined, profile)
     );
-    unsubs.push(watchMaintenanceRecords((data) => setMaintenanceRecords(data)));
+    unsubs.push(watchMaintenanceRecords((data) => setMaintenanceRecords(data), undefined, profile));
     unsubs.push(
       watchSpareParts(async (data) => {
         setSpareParts(data);
@@ -267,14 +297,14 @@ function MainApp() {
             console.error('Seed parts err:', e);
           }
         }
-      })
+      }, undefined, profile)
     );
-    unsubs.push(watchAssetMovements(100, (data) => setMovements(data)));
+    unsubs.push(watchAssetMovements(100, (data) => setMovements(data), undefined, profile));
 
     return () => {
       unsubs.forEach((u) => u());
     };
-  }, [user]);
+  }, [user, profile]);
 
   if (authLoading) {
     return (
@@ -332,9 +362,7 @@ function MainApp() {
         {/* Sidebar */}
         <Sidebar
           currentTab={currentTab}
-          onSelectTab={(tab) => {
-            setCurrentTab(tab);
-          }}
+          onSelectTab={navigateToTab}
           pendingCustodyCount={pendingCustody}
           openMaintenanceCount={openMaintenance}
           lowStockCount={lowStock}
@@ -351,10 +379,10 @@ function MainApp() {
               custodyCards={custodyCards}
               spareParts={spareParts}
               maintenanceRecords={maintenanceRecords}
-              onNavigate={(tab) => setCurrentTab(tab)}
-              onOpenAddAsset={() => setCurrentTab('assets')}
-              onOpenAddCustody={() => setCurrentTab('custody')}
-              onOpenAddMaintenance={() => setCurrentTab('maintenance')}
+              onNavigate={navigateToTab}
+              onOpenAddAsset={() => navigateToTab('assets')}
+              onOpenAddCustody={() => navigateToTab('custody')}
+              onOpenAddMaintenance={() => navigateToTab('maintenance')}
             />
           )}
 
@@ -368,11 +396,11 @@ function MainApp() {
               offices={offices}
               onOpenAddCustodyWithAsset={(asset) => {
                 setAssetForCustody(asset);
-                setCurrentTab('custody');
+                navigateToTab('custody');
               }}
               onOpenMaintenanceWithAsset={(asset) => {
                 setAssetForMaintenance(asset);
-                setCurrentTab('maintenance');
+                navigateToTab('maintenance');
               }}
             />
           )}
@@ -419,6 +447,7 @@ function MainApp() {
             <SparePartsView
               spareParts={spareParts}
               maintenanceRecords={maintenanceRecords}
+              warehouses={warehouses}
             />
           )}
 
@@ -427,7 +456,7 @@ function MainApp() {
           )}
 
           {currentTab === 'import' && (
-            <AssetImportView assets={assets} />
+            <AssetImportView assets={assets} offices={offices} />
           )}
 
           {currentTab === 'reports' && (

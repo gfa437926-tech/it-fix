@@ -2,7 +2,7 @@ name: IT Fix CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, work/python-asset-inventory]
   pull_request:
     branches: [main]
 
@@ -21,6 +21,12 @@ jobs:
           node-version: 24.12.0
       - name: Install dependencies
         run: npm install --legacy-peer-deps --no-audit --no-fund
+      - name: Install Firebase rules test tools
+        run: npm install --no-save --legacy-peer-deps @firebase/rules-unit-testing firebase-tools
+      - name: Firestore and Storage rules tests (emulators only)
+        run: npm run test:rules
+      - name: Read-only scope audit utility tests
+        run: npm run test:audit
       - name: TypeScript check
         run: npm run lint
       - name: Production web build

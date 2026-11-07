@@ -1,0 +1,342 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from openpyxl import Workbook, load_workbook
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from python_app.models import Asset, AssetMovement, AuditLog, Base, Office
+from python_app.services.assets import (
+    AssetInput,
+    create_asset,
+    create_asset_for_scope,
+    create_office,
+    get_dashboard_summary,
+    list_assets,
+    list_assets_for_scope,
+    retire_asset,
+    retire_asset_for_scope,
+    transfer_asset,
+    transfer_asset_for_scope,
+    update_asset,
+    update_asset_for_scope,
+)
+from python_app.models import AppUser
+from python_app.services.authorization import AuthorizationContext
+from python_app.services.excel_service import (
+    export_assets_to_excel,
+    import_assets_from_excel,
+)
+
+
+@pytest.fixture()
+def session() -> Session:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    db = factory()
+    try:
+        yield db
+    finally:
+        db.close()
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
+def test_create_asset_normalizes_serial_and_records_movement(session: Session) -> None:
+    office = create_office(session, "المستودع الرئيسي", building="المبنى الأول")
+    asset = create_asset(session, AssetInput(
+        category="laptop",
+        brand="HP",
+        model="ProBook",
+        serial_number="  sn-100  ",
+        office_id=office.id,
+    ), actor_name="مدير الاختبار")
+
+    assert asset.serial_number == "SN-100"
+    assert asset.serial_key == "SN-100"
+    assert asset.office_name == "المستودع الرئيسي"
+    movement = session.scalar(select(AssetMovement).where(AssetMovement.asset_id == asset.id))
+    assert movement is not None
+    assert movement.movement_type == "registered"
+
+
+def test_duplicate_serial_is_rejected_case_insensitively(session: Session) -> None:
+    create_asset(session, AssetInput("desktop", "Dell", "OptiPlex", "D-001"))
+    with pytest.raises(ValueError, match="مسجل مسبقاً"):
+        create_asset(session, AssetInput("desktop", "HP", "EliteDesk", " d-001 "))
+
+    assert len(list_assets(session)) == 1
+
+
+def test_update_asset_can_change_unique_serial(session: Session) -> None:
+    asset = create_asset(session, AssetInput("desktop", "Dell", "OptiPlex", "OLD-1"))
+    updated = update_asset(session, asset.id, AssetInput(
+        "desktop", "Dell", "OptiPlex 7010", "NEW-1", status="available"
+    ))
+
+    assert updated.model == "OptiPlex 7010"
+    assert updated.serial_number == "NEW-1"
+    assert session.scalar(select(Asset.id).where(Asset.serial_key == "OLD-1")) is None
+
+
+def test_transfer_requires_available_asset_and_active_office(session: Session) -> None:
+    source = create_office(session, "المستودع")
+    destination = create_office(session, "قسم الشبكات", building="المبنى الإداري")
+    asset = create_asset(session, AssetInput(
+        "laptop", "Lenovo", "ThinkPad", "L-1", office_id=source.id
+    ))
+
+    transferred = transfer_asset(session, asset.id, destination.id, "نقل بطلب الإدارة")
+    assert transferred.office_id == destination.id
+    assert transferred.transferred_at is not None
+    movement = session.scalar(select(AssetMovement).where(
+        AssetMovement.asset_id == asset.id,
+        AssetMovement.movement_type == "transferred",
+    ))
+    assert movement is not None
+    assert movement.from_office_id == source.id
+    assert movement.to_office_id == destination.id
+
+
+def test_retire_asset_requires_reason_and_blocks_assigned_asset(session: Session) -> None:
+    available = create_asset(session, AssetInput("monitor", "Dell", "P2422H", "M-1"))
+    with pytest.raises(ValueError, match="سبب الاستبعاد"):
+        retire_asset(session, available.id, " ")
+
+    retired = retire_asset(session, available.id, "تلف غير قابل للإصلاح")
+    assert retired.status == "retired"
+    assert retired.retirement_reason == "تلف غير قابل للإصلاح"
+
+    assigned = create_asset(session, AssetInput(
+        "desktop", "HP", "ProDesk", "D-2", status="assigned"
+    ))
+    with pytest.raises(ValueError, match="إغلاق العهدة"):
+        retire_asset(session, assigned.id, "غير صالح")
+
+
+def test_dashboard_counts_assets_and_offices(session: Session) -> None:
+    create_office(session, "المكتب الأول")
+    create_asset(session, AssetInput("desktop", "Dell", "A", "A-1", status="available"))
+    create_asset(session, AssetInput("laptop", "HP", "B", "B-1", status="assigned"))
+    create_asset(session, AssetInput("printer", "HP", "C", "C-1", status="maintenance"))
+
+    summary = get_dashboard_summary(session)
+    assert summary.total_assets == 3
+    assert summary.available == 1
+    assert summary.assigned == 1
+    assert summary.maintenance == 1
+    assert summary.active_offices == 1
+
+
+def test_excel_import_reports_duplicates_and_skips_invalid_rows(
+    session: Session, tmp_path: Path
+) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "الأصول"
+    sheet.append(["الفئة", "الشركة المصنعة", "الطراز", "الرقم التسلسلي", "المكتب"])
+    sheet.append(["لابتوب", "HP", "ProBook", "EX-001", "المستودع"])
+    sheet.append(["كمبيوتر مكتبي", "Dell", "OptiPlex", "EX-001", "المستودع"])
+    sheet.append(["شاشة", "", "P2422H", "EX-003", "المستودع"])
+    file_path = tmp_path / "assets.xlsx"
+    workbook.save(file_path)
+
+    result = import_assets_from_excel(session, file_path, "مدير الاختبار")
+
+    assert result.total_rows == 3
+    assert result.succeeded_rows == 1
+    assert result.failed_rows == 1
+    assert result.skipped_rows == 1
+    assert any("مسجل مسبقاً" in message for message in result.row_errors)
+
+
+def test_excel_export_preserves_inventory_and_writes_arabic_headers(
+    session: Session, tmp_path: Path
+) -> None:
+    create_asset(session, AssetInput("laptop", "HP", "ProBook", "EX-100"))
+    file_path = tmp_path / "export.xlsx"
+
+    exported = export_assets_to_excel(session, file_path)
+
+    assert exported == 1
+    workbook = load_workbook(file_path, read_only=True, data_only=True)
+    try:
+        sheet = workbook.active
+        assert sheet["A1"].value == "الفئة"
+        assert sheet["B2"].value == "HP"
+        assert sheet["D2"].value == "EX-100"
+    finally:
+        workbook.close()
+
+
+def test_excel_export_escapes_formula_like_text(session: Session, tmp_path: Path) -> None:
+    create_asset(session, AssetInput("other", "=HYPERLINK", "Model", "FORM-1"))
+    file_path = tmp_path / "safe.xlsx"
+    export_assets_to_excel(session, file_path)
+
+    workbook = load_workbook(file_path, read_only=True, data_only=True)
+    try:
+        assert workbook.active["B2"].value == "'=HYPERLINK"
+    finally:
+        workbook.close()
+
+
+def test_office_duplicate_location_is_rejected(session: Session) -> None:
+    create_office(session, "قسم الحاسوب", building="المبنى الرئيسي", room="12")
+    with pytest.raises(ValueError, match="مسجل مسبقاً"):
+        create_office(session, "قسم الحاسوب", building="المبنى الرئيسي", room="12")
+
+def test_update_asset_cannot_bypass_custody_or_maintenance_status_workflows(
+    session: Session,
+) -> None:
+    asset = create_asset(
+        session, AssetInput("laptop", "Lenovo", "ThinkPad", "STATUS-1")
+    )
+
+    with pytest.raises(ValueError, match="إجراءات العهدة والصيانة"):
+        update_asset(
+            session,
+            asset.id,
+            AssetInput(
+                "laptop", "Lenovo", "ThinkPad", "STATUS-1", status="assigned"
+            ),
+        )
+
+    session.refresh(asset)
+    assert asset.status == "available"
+    assert session.scalar(
+        select(AssetMovement).where(
+            AssetMovement.asset_id == asset.id,
+            AssetMovement.movement_type == "assigned",
+        )
+    ) is None
+
+
+
+def test_scoped_asset_list_excludes_other_offices_and_unassigned_assets(
+    session: Session,
+) -> None:
+    allowed = create_office(session, "المكتب المسموح")
+    forbidden = create_office(session, "المكتب غير المسموح", building="مبنى آخر")
+    visible = create_asset(
+        session, AssetInput("laptop", "HP", "Visible", "SCOPE-1", office_id=allowed.id)
+    )
+    create_asset(
+        session, AssetInput("desktop", "Dell", "Hidden", "SCOPE-2", office_id=forbidden.id)
+    )
+    create_asset(session, AssetInput("monitor", "AOC", "Unassigned", "SCOPE-3"))
+
+    actor = AppUser(
+        id="scope-user", username="scope-user", display_name="مستخدم نطاق",
+        password_hash="unused", role="it_manager", is_active=True,
+    )
+    context = AuthorizationContext(
+        actor, frozenset({"assets.read"}), frozenset({allowed.id}), frozenset()
+    )
+
+    results = list_assets_for_scope(session, context)
+    assert [asset.id for asset in results] == [visible.id]
+
+
+def test_scoped_asset_list_denies_empty_office_scope(session: Session) -> None:
+    context = AuthorizationContext(
+        AppUser(
+            id="empty-user", username="empty-user", display_name="بلا نطاق",
+            password_hash="unused", role="it_manager", is_active=True,
+        ),
+        frozenset({"assets.read"}), frozenset(), frozenset(),
+    )
+    with pytest.raises(PermissionError, match="لا توجد مكاتب"):
+        list_assets_for_scope(session, context)
+
+
+def test_scoped_asset_list_requires_read_permission(session: Session) -> None:
+    office = create_office(session, "مكتب القراءة")
+    context = AuthorizationContext(
+        AppUser(
+            id="no-read-user", username="no-read-user", display_name="بلا إذن",
+            password_hash="unused", role="it_manager", is_active=True,
+        ),
+        frozenset(), frozenset({office.id}), frozenset(),
+    )
+    with pytest.raises(PermissionError):
+        list_assets_for_scope(session, context)
+
+
+def _scoped_context(office_ids: set[str], permissions: set[str]) -> AuthorizationContext:
+    return AuthorizationContext(
+        AppUser(
+            id="scoped-actor", username="scoped-actor", display_name="مستخدم مخول",
+            password_hash="unused", role="it_manager", is_active=True,
+        ),
+        frozenset(permissions), frozenset(office_ids), frozenset(),
+    )
+
+
+def test_scoped_create_rejects_office_outside_grants(session: Session) -> None:
+    allowed = create_office(session, "إنشاء مسموح")
+    denied = create_office(session, "إنشاء ممنوع", building="مبنى آخر")
+    context = _scoped_context({allowed.id}, {"assets.create"})
+    with pytest.raises(PermissionError, match="خارج نطاق"):
+        create_asset_for_scope(
+            session, context,
+            AssetInput("laptop", "HP", "Blocked", "CREATE-DENIED", office_id=denied.id),
+        )
+    assert session.scalar(select(Asset.id).where(Asset.serial_key == "CREATE-DENIED")) is None
+
+
+def test_scoped_create_and_update_require_permissions_and_scope(session: Session) -> None:
+    office = create_office(session, "إنشاء وتعديل")
+    other = create_office(session, "مكتب آخر", building="مبنى آخر")
+    context = _scoped_context({office.id}, {"assets.create", "assets.update"})
+    asset = create_asset_for_scope(
+        session, context,
+        AssetInput("laptop", "HP", "Initial", "SCOPED-UPDATE", office_id=office.id),
+    )
+    updated = update_asset_for_scope(
+        session, context, asset.id,
+        AssetInput("laptop", "HP", "Updated", "SCOPED-UPDATE", office_id=office.id),
+    )
+    assert updated.model == "Updated"
+
+    with pytest.raises(PermissionError):
+        update_asset_for_scope(
+            session, context, asset.id,
+            AssetInput("laptop", "HP", "Move denied", "SCOPED-UPDATE", office_id=other.id),
+        )
+    session.refresh(asset)
+    assert asset.office_id == office.id
+
+
+def test_scoped_transfer_checks_both_offices_and_retirement_permission(session: Session) -> None:
+    source = create_office(session, "مصدر النقل")
+    destination = create_office(session, "وجهة النقل", building="مبنى آخر")
+    asset = create_asset(
+        session, AssetInput("laptop", "Lenovo", "T", "SCOPED-TRANSFER", office_id=source.id)
+    )
+    source_only = _scoped_context({source.id}, {"assets.transfer", "assets.retire"})
+    with pytest.raises(PermissionError):
+        transfer_asset_for_scope(session, source_only, asset.id, destination.id)
+    session.refresh(asset)
+    assert asset.office_id == source.id
+
+    both = _scoped_context(
+        {source.id, destination.id}, {"assets.transfer", "assets.retire"}
+    )
+    transferred = transfer_asset_for_scope(session, both, asset.id, destination.id)
+    assert transferred.office_id == destination.id
+
+    no_retire = _scoped_context({destination.id}, {"assets.read"})
+    with pytest.raises(PermissionError):
+        retire_asset_for_scope(session, no_retire, asset.id, "سبب")
+    assert retire_asset_for_scope(
+        session, both, asset.id, "تالف وغير قابل للإصلاح"
+    ).status == "retired"

@@ -25,7 +25,7 @@ import {
   ASSET_CATEGORY_LABELS,
   ASSET_STATUS_LABELS,
 } from '../types';
-import { createAsset, updateAsset, transferAsset, retireAsset } from '../services/assetService';
+import { createAsset, updateAsset, transferAsset, retireAsset, recordInventoryCheck } from '../services/assetService';
 import { useAuth } from '../context/AuthContext';
 
 interface AssetsViewProps {
@@ -41,7 +41,12 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
   onOpenAddCustodyWithAsset,
   onOpenMaintenanceWithAsset,
 }) => {
-  const { profile, isAdmin } = useAuth();
+  const { profile } = useAuth();
+  const canCreateAssets = profile?.accessControlEnabled !== true || profile.permissions?.['assets.create'] === true;
+  const canUpdateAssets = profile?.accessControlEnabled !== true || profile.permissions?.['assets.update'] === true;
+  const canManageCustody = profile?.accessControlEnabled !== true || profile.permissions?.['custody.manage'] === true;
+  const canManageMaintenance = profile?.accessControlEnabled !== true || profile.permissions?.['maintenance.manage'] === true;
+  const canRecordInventoryCheck = profile?.accessControlEnabled !== true || profile.permissions?.['inventory.manage'] === true;
   const actorName = profile?.displayName || 'المسؤول';
 
   // Filters
@@ -71,6 +76,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
   const [scannedInput, setScannedInput] = useState('');
   const [scannedAssetResult, setScannedAssetResult] = useState<Asset | null>(null);
   const [auditSuccessMsg, setAuditSuccessMsg] = useState('');
+  const [auditSaving, setAuditSaving] = useState(false);
 
   const handleScanQuery = (queryVal: string) => {
     setScannedInput(queryVal);
@@ -153,6 +159,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
           ram: ram.trim() || undefined,
           storage: storageVal.trim() || undefined,
           officeId: selectedOffice?.id || editingAsset.officeId,
+          warehouseId: selectedOffice ? (selectedOffice.warehouseId || '') : editingAsset.warehouseId,
           officeName: selectedOffice?.name || editingAsset.officeName,
         });
       } else {
@@ -167,6 +174,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
             ram: ram.trim() || undefined,
             storage: storageVal.trim() || undefined,
             officeId: selectedOffice?.id,
+            warehouseId: selectedOffice?.warehouseId,
             officeName: selectedOffice?.name || 'المستودع الرئيسي',
             receivedAt: new Date().toISOString(),
           },
@@ -266,13 +274,13 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
             <span>مسح باركود / QR (جرد سريع)</span>
           </button>
 
-          <button
+          {canCreateAssets && <button
             onClick={openAddForm}
             className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#168C8C] hover:bg-[#137676] text-white text-sm font-bold rounded-xl shadow-xs transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>إضافة أصل جديد</span>
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -413,7 +421,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                           </button>
 
                           {/* Edit */}
-                          {isAdmin && (
+                          {canUpdateAssets && (
                             <button
                               onClick={() => openEditForm(asset)}
                               title="تعديل الجهاز"
@@ -424,7 +432,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                           )}
 
                           {/* Transfer (if available) */}
-                          {(asset.status === 'available' || asset.status === 'returned') && (
+                          {canUpdateAssets && (asset.status === 'available' || asset.status === 'returned') && (
                             <button
                               onClick={() => {
                                 setTransferingAsset(asset);
@@ -439,7 +447,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                           )}
 
                           {/* Assign Custody (if available) */}
-                          {(asset.status === 'available' || asset.status === 'returned') &&
+                          {canManageCustody && (asset.status === 'available' || asset.status === 'returned') &&
                             onOpenAddCustodyWithAsset && (
                               <button
                                 onClick={() => onOpenAddCustodyWithAsset(asset)}
@@ -464,7 +472,7 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                             )}
 
                           {/* Retire Asset */}
-                          {isAdmin &&
+                          {canUpdateAssets &&
                             asset.status !== 'assigned' &&
                             asset.status !== 'maintenance' &&
                             asset.status !== 'retired' && (
@@ -974,17 +982,31 @@ export const AssetsView: React.FC<AssetsViewProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
-                        <button
-                          onClick={() => {
-                            setAuditSuccessMsg(
-                              `تم تأكيد جرد الأصل (${scannedAssetResult.brand} ${scannedAssetResult.model}) بنجاح في الموقع الحالي.`
-                            );
-                            setTimeout(() => setAuditSuccessMsg(''), 4000);
+                        {canRecordInventoryCheck && <button
+                          onClick={async () => {
+                            if (!profile?.uid || auditSaving) return;
+                            setAuditSaving(true);
+                            setAuditSuccessMsg('');
+                            try {
+                              await recordInventoryCheck(scannedAssetResult, {
+                                uid: profile.uid,
+                                name: actorName,
+                                email: profile.email,
+                              });
+                              setAuditSuccessMsg(
+                                `تم حفظ عملية جرد (${scannedAssetResult.brand} ${scannedAssetResult.model}) في سجل الجرد بتاريخ ${new Date().toLocaleString('ar')}`
+                              );
+                            } catch (error) {
+                              alert(error instanceof Error ? error.message : 'تعذر حفظ عملية الجرد');
+                            } finally {
+                              setAuditSaving(false);
+                            }
                           }}
-                          className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer"
+                          disabled={auditSaving || !profile?.uid}
+                          className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl cursor-pointer disabled:opacity-50"
                         >
-                          تأكيد الجرد والتحقق
-                        </button>
+                          {auditSaving ? 'جاري حفظ الجرد...' : 'تأكيد الجرد والتحقق'}
+                        </button>}
                         <button
                           onClick={() => {
                             setIsScannerOpen(false);

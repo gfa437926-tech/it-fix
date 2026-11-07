@@ -49,7 +49,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   lowStockCount = 0,
   hasGoogleSheetConnected = false,
 }) => {
-  const { isAdmin, isPrimaryController } = useAuth();
+  const { isAdmin, isPrimaryController, profile } = useAuth();
+  const hasScopedPermission = (...permissions: string[]) =>
+    profile?.accessControlEnabled !== true ||
+    permissions.some((permission) =>
+      (profile?.permissions as Record<string, boolean> | undefined)?.[permission] === true
+    );
 
   const navItems: {
     id: NavTab;
@@ -59,16 +64,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
     badgeColor?: string;
     badgeText?: string;
     adminOnly?: boolean;
+    controllerOnly?: boolean;
+    permissions?: string[];
     highlight?: boolean;
   }[] = [
     { id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard },
-    { id: 'assets', label: 'الأجهزة والبطاقات', icon: Laptop2 },
+    { id: 'assets', label: 'الأجهزة والبطاقات', icon: Laptop2, permissions: ['assets.read', 'assets.create', 'assets.update', 'assets.delete'] },
     {
       id: 'custody',
       label: 'بطاقات العهدة',
       icon: FileCheck2,
       badge: pendingCustodyCount,
       badgeColor: 'bg-amber-500 text-white',
+      permissions: ['custody.read', 'custody.manage'],
     },
     {
       id: 'google-sheets',
@@ -77,11 +85,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badgeText: hasGoogleSheetConnected ? 'مُعدّ' : undefined,
       badgeColor: 'bg-emerald-500 text-white',
       highlight: true,
+      controllerOnly: true,
     },
     {
       id: 'import',
       label: 'رفع وتعديل ملفات الشيت',
       icon: UploadCloud,
+      permissions: ['assets.create', 'assets.update'],
     },
     {
       id: 'maintenance',
@@ -89,19 +99,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Wrench,
       badge: openMaintenanceCount,
       badgeColor: 'bg-rose-500 text-white',
+      permissions: ['maintenance.read', 'maintenance.manage'],
     },
-    { id: 'service-history', label: 'السجل الفني للأجهزة', icon: FileText },
+    { id: 'service-history', label: 'السجل الفني للأجهزة', icon: FileText, permissions: ['maintenance.read', 'maintenance.manage', 'assets.read'] },
     {
       id: 'spare-parts',
       label: 'مخزون قطع الغيار',
       icon: Boxes,
       badge: lowStockCount,
       badgeColor: 'bg-amber-500 text-white',
+      permissions: ['spareparts.read', 'spareparts.manage'],
     },
-    { id: 'offices', label: 'المكاتب والمواقع', icon: Building2 },
-    { id: 'movements', label: 'حركة وسجل الأجهزة', icon: History },
-    { id: 'documents', label: 'المرفقات والوثائق', icon: Paperclip },
-    { id: 'reports', label: 'التقارير والتصدير', icon: BarChart3 },
+    { id: 'offices', label: 'المكاتب والمواقع', icon: Building2, permissions: ['offices.read', 'offices.manage', 'assets.read'] },
+    { id: 'movements', label: 'حركة وسجل الأجهزة', icon: History, permissions: ['assets.read', 'assets.update', 'custody.read', 'custody.manage', 'maintenance.read', 'maintenance.manage'] },
+    { id: 'documents', label: 'المرفقات والوثائق', icon: Paperclip, permissions: ['documents.read', 'documents.manage'] },
+    { id: 'reports', label: 'التقارير والتصدير', icon: BarChart3, permissions: ['reports.read'] },
     {
       id: 'users',
       label: 'المستخدمون والصلاحيات',
@@ -128,6 +140,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <nav className="p-2 md:p-3 flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-x-hidden md:overflow-y-auto flex-1">
         {navItems.map((item) => {
           if (item.adminOnly && !isAdmin) return null;
+          if (item.controllerOnly && !isPrimaryController) return null;
+          if (item.permissions && !hasScopedPermission(...item.permissions)) return null;
           const Icon = item.icon;
           const active = currentTab === item.id;
 

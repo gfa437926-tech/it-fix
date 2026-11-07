@@ -1,0 +1,19 @@
+[project]
+name = "itfix-asset-inventory"
+version = "0.1.0"
+description = "Arabic-first standalone Python asset inventory application"
+requires-python = ">=3.11"
+dependencies = [
+  "SQLAlchemy>=2.0,<2.1",
+  "psycopg[binary]>=3.2,<4",
+  "openpyxl>=3.1,<4",
+  "python-dotenv>=1.0,<2",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q"

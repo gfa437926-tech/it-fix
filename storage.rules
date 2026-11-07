@@ -1,0 +1,96 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profileExists() {
+      return signedIn() &&
+        firestore.exists(/databases/(default)/documents/users/$(request.auth.uid));
+    }
+
+    function profile() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isPrimaryController() {
+      return signedIn() &&
+        firestore.exists(/databases/(default)/documents/system_settings/controller) &&
+        firestore.get(/databases/(default)/documents/system_settings/controller).data.primaryUid == request.auth.uid;
+    }
+
+    function isLegacyItManager() {
+      return profileExists() &&
+        profile().isActive == true &&
+        profile().role == 'it_manager' &&
+        (!profile().keys().hasAny(['accessControlEnabled']) || profile().accessControlEnabled != true);
+    }
+
+    function hasPermission(permission) {
+      return profileExists() &&
+        profile().keys().hasAny(['permissions']) &&
+        profile().permissions is map &&
+        profile().permissions.get(permission, false) == true;
+    }
+
+    function hasAssignedScope(officeId, warehouseId) {
+      let hasOffice = officeId is string && officeId.size() > 0;
+      let hasWarehouse = warehouseId is string && warehouseId.size() > 0;
+      let officeAllowed = !hasOffice ||
+        (profile().keys().hasAny(['officeIds']) &&
+          profile().officeIds is list &&
+          profile().officeIds.hasAny([officeId]));
+      let warehouseAllowed = !hasWarehouse ||
+        (profile().keys().hasAny(['warehouseIds']) &&
+          profile().warehouseIds is list &&
+          profile().warehouseIds.hasAny([warehouseId]));
+      // Enforce intersection when a resource is tagged with both scopes.
+      return (hasOffice || hasWarehouse) && officeAllowed && warehouseAllowed;
+    }
+
+    function linkedAssetExists(assetId) {
+      return firestore.exists(/databases/(default)/documents/assets/$(assetId));
+    }
+
+    function linkedAssetInScope(assetId) {
+      return linkedAssetExists(assetId) &&
+        hasAssignedScope(
+          firestore.get(/databases/(default)/documents/assets/$(assetId)).data.officeId,
+          firestore.get(/databases/(default)/documents/assets/$(assetId)).data.warehouseId
+        );
+    }
+
+    function canReadAssetFiles(assetId) {
+      return isPrimaryController() || isLegacyItManager() ||
+        (
+          profileExists() &&
+          profile().isActive == true &&
+          (hasPermission('documents.read') || hasPermission('documents.manage')) &&
+          linkedAssetInScope(assetId)
+        );
+    }
+
+    function canManageAssetFiles(assetId) {
+      return isPrimaryController() || isLegacyItManager() ||
+        (
+          profileExists() &&
+          profile().isActive == true &&
+          hasPermission('documents.manage') &&
+          linkedAssetInScope(assetId)
+        );
+    }
+
+    match /asset_documents/{assetId}/{fileName} {
+      allow read: if canReadAssetFiles(assetId);
+      allow create, update: if canManageAssetFiles(assetId) &&
+        request.resource.size < 20 * 1024 * 1024 &&
+        request.resource.contentType.matches('application/pdf|image/.*|text/plain|application/vnd.openxmlformats-officedocument.*|application/vnd.ms-excel');
+      allow delete: if canManageAssetFiles(assetId);
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

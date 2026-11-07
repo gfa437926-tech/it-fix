@@ -52,6 +52,8 @@ export interface Asset {
   storage?: string;
   officeId?: string;
   officeName?: string;
+  warehouseId?: string;
+  warehouseName?: string;
   receivedAt?: string;
   retiredAt?: string;
   retirementReason?: string;
@@ -64,6 +66,7 @@ export interface Office {
   building?: string;
   directorate?: string;
   department?: string;
+  warehouseId?: string;
   room?: string;
   manager?: string;
   phone?: string;
@@ -105,6 +108,8 @@ export interface CustodyRecord {
   directorate?: string; // المديرية
   department?: string; // الدائرة
   officeName: string; // المكتب أو اسم المكتب
+  officeId?: string;
+  warehouseId?: string;
   officeRoom?: string; // رقم المكتب / الغرفة
 
   // قائمة المواد التابعة للبطاقة (مطابقة لجدول الورقة الرسمية)
@@ -159,6 +164,8 @@ export interface MaintenanceRecord {
   title: string;
   description: string;
   priority: MaintenancePriority;
+  officeId?: string;
+  warehouseId?: string;
   status: MaintenanceStatus;
   reportedAt: string;
   technician?: string;
@@ -177,6 +184,7 @@ export interface SparePart {
   minimumQuantity: number;
   unitCost: number;
   supplier: string;
+  warehouseId?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -187,6 +195,8 @@ export interface MaintenancePartUsage {
   partName: string;
   maintenanceId: string;
   assetId: string;
+  officeId?: string;
+  warehouseId?: string;
   quantity: number;
   unitCost: number;
   totalCost: number;
@@ -208,6 +218,7 @@ export interface PurchaseRecord {
 }
 
 export type MovementType =
+  | 'created'
   | 'assigned'
   | 'returned'
   | 'transferred'
@@ -220,6 +231,7 @@ export type MovementType =
   | 'purchase_registered';
 
 export const MOVEMENT_TYPE_LABELS: Record<string, string> = {
+  created: 'إضافة أصل إلى المخزون',
   assigned: 'تسليم عهدة جديدة',
   returned: 'إرجاع جهاز للمستودع',
   transferred: 'نقل جهاز بين المكاتب',
@@ -235,6 +247,8 @@ export const MOVEMENT_TYPE_LABELS: Record<string, string> = {
 export interface AssetMovement {
   id: string;
   assetId: string;
+  officeId?: string;
+  warehouseId?: string;
   assetLabel: string;
   movementType: string;
   occurredAt: string;
@@ -266,6 +280,8 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
 export interface AssetDocument {
   id: string;
   assetId: string;
+  officeId?: string;
+  warehouseId?: string;
   purchaseRecordId?: string;
   fileName: string;
   documentType: DocumentType;
@@ -292,12 +308,69 @@ export interface ImportBatch {
   rowErrors: string[];
 }
 
+export type UserPermission =
+  | 'assets.read' | 'assets.create' | 'assets.update' | 'assets.delete'
+  | 'offices.read' | 'offices.manage'
+  | 'warehouses.read' | 'warehouses.manage'
+  | 'custody.read' | 'custody.manage'
+  | 'maintenance.read' | 'maintenance.manage'
+  | 'spareparts.read' | 'spareparts.manage'
+  | 'documents.read' | 'documents.manage'
+  | 'inventory.read' | 'inventory.manage'
+  | 'reports.read';
+
+export interface Warehouse {
+  id: string;
+  name: string;
+  code?: string;
+  officeIds?: string[];
+  isActive: boolean;
+  notes?: string;
+}
+
+export type AccessProfile =
+  | 'custom'
+  | 'asset_operator'
+  | 'warehouse_manager'
+  | 'office_manager'
+  | 'custody_officer'
+  | 'maintenance_technician'
+  | 'auditor'
+  | 'viewer';
+
+export const ACCESS_PROFILE_LABELS: Record<AccessProfile, string> = {
+  custom: 'تخصيص يدوي',
+  asset_operator: 'مسؤول الأصول',
+  warehouse_manager: 'مسؤول المستودع',
+  office_manager: 'مسؤول المكتب',
+  custody_officer: 'مسؤول العهد',
+  maintenance_technician: 'فني الصيانة',
+  auditor: 'مدقق',
+  viewer: 'مشاهدة فقط',
+};
+
+export const ACCESS_PROFILE_PRESETS: Record<Exclude<AccessProfile, 'custom'>, UserPermission[]> = {
+  asset_operator: ['assets.read', 'assets.create', 'assets.update', 'documents.read', 'documents.manage', 'inventory.manage', 'reports.read'],
+  warehouse_manager: ['assets.read', 'warehouses.read', 'warehouses.manage', 'offices.read', 'spareparts.read', 'spareparts.manage', 'documents.read', 'inventory.read', 'inventory.manage', 'reports.read'],
+  office_manager: ['assets.read', 'offices.read', 'offices.manage', 'warehouses.read', 'documents.read', 'inventory.read', 'reports.read'],
+  custody_officer: ['assets.read', 'custody.read', 'custody.manage', 'documents.read', 'documents.manage', 'reports.read'],
+  maintenance_technician: ['assets.read', 'maintenance.read', 'maintenance.manage', 'spareparts.read', 'spareparts.manage', 'documents.read', 'documents.manage', 'reports.read'],
+  auditor: ['assets.read', 'offices.read', 'warehouses.read', 'custody.read', 'maintenance.read', 'spareparts.read', 'documents.read', 'inventory.read', 'reports.read'],
+  viewer: ['assets.read', 'offices.read', 'warehouses.read', 'custody.read', 'maintenance.read', 'spareparts.read', 'documents.read', 'inventory.read'],
+};
+
 export interface UserProfile {
   uid: string;
   displayName: string;
   email: string;
   role: 'admin' | 'it_manager';
   isActive: boolean;
+  // When enabled, Firestore rules require explicit permissions and assigned scope.
+  accessControlEnabled?: boolean;
+  accessProfile?: AccessProfile;
+  permissions?: Partial<Record<UserPermission, boolean>>;
+  officeIds?: string[];
+  warehouseIds?: string[];
   createdAt: string;
   updatedAt?: string;
 }

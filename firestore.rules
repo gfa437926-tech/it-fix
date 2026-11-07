@@ -25,10 +25,9 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return signedIn() && (
-        request.auth.token.email == 'gfa437926@gmail.com' ||
-        (userExists() && userDoc().role == 'admin')
-      );
+      // Keep elevated account administration bound to the immutable controller UID.
+      // A profile role alone must never grant privilege to promote or disable users.
+      return isPrimaryController();
     }
 
     function isActiveUser() {
@@ -36,7 +35,82 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSuperAdmin() || (isActiveUser() && userDoc().role in ['admin', 'it_manager']);
+      // Scoped IT managers must never inherit global admin access from their role.
+      // The legacy fallback exists only for accounts not yet migrated by the controller.
+      return isSuperAdmin() ||
+        (
+          isActiveUser() &&
+          userDoc().role == 'it_manager' &&
+          (!userDoc().keys().hasAny(['accessControlEnabled']) ||
+            userDoc().accessControlEnabled != true)
+        );
+    }
+
+    // Legacy IT managers remain compatible until the controller explicitly
+    // enables scoped access for their profile. Once enabled, no implicit
+    // access is granted: each operation needs a permission and an assigned scope.
+    function isScopedAccessEnabled() {
+      return isActiveUser() &&
+        userDoc().keys().hasAny(['accessControlEnabled']) &&
+        userDoc().accessControlEnabled == true;
+    }
+
+    function isLegacyItManager() {
+      return isActiveUser() &&
+        userDoc().role == 'it_manager' &&
+        !isScopedAccessEnabled();
+    }
+
+    function hasPermission(permission) {
+      return userDoc().keys().hasAny(['permissions']) &&
+        userDoc().permissions is map &&
+        userDoc().permissions.get(permission, false) == true;
+    }
+
+    function hasAnyPermission(first, second, third) {
+      return hasPermission(first) || hasPermission(second) || hasPermission(third);
+    }
+
+    function hasAssignedScope(officeId, warehouseId) {
+      let hasOffice = officeId is string && officeId.size() > 0;
+      let hasWarehouse = warehouseId is string && warehouseId.size() > 0;
+      let officeAllowed = !hasOffice ||
+        (userDoc().keys().hasAny(['officeIds']) &&
+          userDoc().officeIds is list &&
+          userDoc().officeIds.hasAny([officeId]));
+      let warehouseAllowed = !hasWarehouse ||
+        (userDoc().keys().hasAny(['warehouseIds']) &&
+          userDoc().warehouseIds is list &&
+          userDoc().warehouseIds.hasAny([warehouseId]));
+      // A record carrying both IDs must match both assignments. An office
+      // assignment must not silently grant access to every warehouse there.
+      return (hasOffice || hasWarehouse) && officeAllowed && warehouseAllowed;
+    }
+
+    function canAccessScopedResource(permission, officeId, warehouseId) {
+      return isPrimaryController() ||
+        isLegacyItManager() ||
+        (
+          isScopedAccessEnabled() &&
+          hasPermission(permission) &&
+          hasAssignedScope(officeId, warehouseId)
+        );
+    }
+
+    function canUpdateAssetWithinScope() {
+      return canAccessScopedResource('assets.update', resource.data.officeId, resource.data.warehouseId) &&
+        canAccessScopedResource('assets.update', request.resource.data.officeId, request.resource.data.warehouseId) ||
+        (
+          isScopedAccessEnabled() &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId) &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId) &&
+          (
+            (hasPermission('custody.manage') &&
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'officeName'])) ||
+            (hasPermission('maintenance.manage') &&
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+          )
+        );
     }
 
     // Health check endpoint for testing initial connection
@@ -51,15 +125,27 @@ service cloud.firestore {
       // A new account may create only its own limited profile. The first
       // controller is elevated only after the controller bootstrap document
       // has been created successfully for this same authenticated UID.
-      allow create: if signedIn() &&
-        request.auth.uid == uid &&
-        request.resource.data.uid == uid &&
-        request.resource.data.email == request.auth.token.email &&
-        request.resource.data.isActive == true &&
+      allow create: if
         (
-          request.resource.data.role == 'it_manager' ||
-          (isPrimaryController() && request.resource.data.role == 'admin') ||
-          (request.auth.token.email == 'gfa437926@gmail.com' && request.resource.data.role == 'admin')
+          // The primary controller may provision a profile for an existing
+          // Firebase Auth UID supplied through the user-management screen.
+          isSuperAdmin() &&
+          request.resource.data.uid == uid &&
+          request.resource.data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'isActive'])
+        ) ||
+        (
+          // Self-registration is restricted to the least-privileged role.
+          signedIn() &&
+          request.auth.uid == uid &&
+          request.resource.data.uid == uid &&
+          request.resource.data.email == request.auth.token.email &&
+          request.resource.data.isActive == true &&
+          request.resource.data.role == 'it_manager' &&
+          request.resource.data.accessControlEnabled == true &&
+          request.resource.data.officeIds == [] &&
+          request.resource.data.warehouseIds == [] &&
+          request.resource.data.permissions is map &&
+          request.resource.data.permissions.keys().size() == 0
         );
 
       // Users can edit basic profile details only; role and activation state
@@ -76,67 +162,187 @@ service cloud.firestore {
 
     // Offices & locations
     match /offices/{officeId} {
-      allow read: if isActiveUser();
-      allow create, update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() &&
+          (hasPermission('offices.read') || hasPermission('offices.manage') ||
+           hasPermission('assets.read') || hasPermission('assets.create') || hasPermission('custody.read') || hasPermission('custody.manage') ||
+           hasPermission('maintenance.read') || hasPermission('maintenance.manage')) &&
+          ((resource.data.id is string && userDoc().officeIds is list && resource.data.id in userDoc().officeIds) ||
+           (resource.data.warehouseId is string && userDoc().warehouseIds is list && resource.data.warehouseId in userDoc().warehouseIds)));
+      allow create: if canAccessScopedResource('offices.manage', officeId, request.resource.data.warehouseId);
+      allow update: if canAccessScopedResource('offices.manage', officeId, resource.data.warehouseId) &&
+        canAccessScopedResource('offices.manage', officeId, request.resource.data.warehouseId);
+      allow delete: if canAccessScopedResource('offices.manage', officeId, resource.data.warehouseId);
+    }
+
+    // Warehouse directory uses the same explicit permission and assignment model.
+    match /warehouses/{warehouseId} {
+      allow read: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() &&
+          (hasPermission('warehouses.read') || hasPermission('warehouses.manage') ||
+           hasPermission('assets.read') || hasPermission('assets.create') || hasPermission('spareparts.read') || hasPermission('spareparts.manage') ||
+           hasPermission('custody.read') || hasPermission('custody.manage') ||
+           hasPermission('maintenance.read') || hasPermission('maintenance.manage')) &&
+          resource.data.id is string && userDoc().warehouseIds is list && resource.data.id in userDoc().warehouseIds);
+      allow create, update, delete: if canAccessScopedResource('warehouses.manage', '', warehouseId);
     }
 
     // Assets inventory
     match /assets/{assetId} {
-      allow read: if isActiveUser();
-      allow create, update: if isAdmin();
-      allow delete: if isAdmin();
+      // A scoped creator may check a fresh deterministic asset ID before create.
+      allow get: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() &&
+          ((!exists(/databases/$(database)/documents/assets/$(assetId)) && hasPermission('assets.create')) ||
+           (exists(/databases/$(database)/documents/assets/$(assetId)) &&
+            (hasAnyPermission('assets.read', 'assets.create', 'assets.update') || hasPermission('custody.manage') || hasPermission('maintenance.manage')) &&
+            hasAssignedScope(resource.data.officeId, resource.data.warehouseId))));
+      allow list: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && (hasAnyPermission('assets.read', 'assets.create', 'assets.update') || hasPermission('assets.delete')) &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
+      allow create: if canAccessScopedResource('assets.create', request.resource.data.officeId, request.resource.data.warehouseId);
+      allow update: if canUpdateAssetWithinScope();
+      allow delete: if canAccessScopedResource('assets.delete', resource.data.officeId, resource.data.warehouseId);
     }
 
     // Unique serial number reservations
     match /asset_serials/{serialId} {
-      allow read, create, update, delete: if isAdmin();
+      // A scoped asset creator may check one deterministic serial reservation,
+      // but cannot enumerate reservations belonging to other offices.
+      allow get: if isPrimaryController() || isLegacyItManager() ||
+        (
+          isScopedAccessEnabled() &&
+          (
+            (!exists(/databases/$(database)/documents/asset_serials/$(serialId)) && hasPermission('assets.create')) ||
+            (
+              resource.data.assetId is string &&
+              exists(/databases/$(database)/documents/assets/$(resource.data.assetId)) &&
+              (hasPermission('assets.read') || hasPermission('assets.create') || hasPermission('assets.update')) &&
+              hasAssignedScope(
+                get(/databases/$(database)/documents/assets/$(resource.data.assetId)).data.officeId,
+                get(/databases/$(database)/documents/assets/$(resource.data.assetId)).data.warehouseId
+              )
+            )
+          )
+        );
+      allow list: if isPrimaryController() || isLegacyItManager();
+      allow create, update: if isPrimaryController() || isLegacyItManager() ||
+        (
+          isScopedAccessEnabled() &&
+          (hasPermission('assets.create') || hasPermission('assets.update')) &&
+          request.resource.data.assetId is string &&
+          existsAfter(/databases/$(database)/documents/assets/$(request.resource.data.assetId)) &&
+          hasAssignedScope(
+            getAfter(/databases/$(database)/documents/assets/$(request.resource.data.assetId)).data.officeId,
+            getAfter(/databases/$(database)/documents/assets/$(request.resource.data.assetId)).data.warehouseId
+          )
+        );
+      allow delete: if isPrimaryController() || isLegacyItManager() ||
+        (
+          isScopedAccessEnabled() &&
+          hasPermission('assets.update') &&
+          resource.data.assetId is string &&
+          exists(/databases/$(database)/documents/assets/$(resource.data.assetId)) &&
+          hasAssignedScope(
+            get(/databases/$(database)/documents/assets/$(resource.data.assetId)).data.officeId,
+            get(/databases/$(database)/documents/assets/$(resource.data.assetId)).data.warehouseId
+          )
+        );
     }
 
-    // Custody assignments
+    // Custody assignments: every scoped card carries its office/warehouse IDs.
     match /custody_cards/{cardId} {
-      allow read: if isActiveUser();
-      allow create, update, delete: if isAdmin();
+      allow read: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && (hasPermission('custody.read') || hasPermission('custody.manage')) &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
+      allow create: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('custody.manage') &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
+      allow update: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('custody.manage') &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId) &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
+      // Custody history is retained; scoped users cannot delete official records.
+      allow delete: if isPrimaryController() || isLegacyItManager();
     }
 
-    // Maintenance records and service history
+    // Maintenance requests inherit the same location scope as their asset.
     match /maintenance_records/{recordId} {
-      allow read: if isActiveUser();
-      allow create, update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && (hasPermission('maintenance.read') || hasPermission('maintenance.manage')) &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
+      allow create: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('maintenance.manage') &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
+      allow update: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('maintenance.manage') &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId) &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
+      allow delete: if isPrimaryController() || isLegacyItManager();
     }
 
-    // Spare parts catalog
+    // Spare-parts stock is assigned to a warehouse, not globally visible.
     match /spare_parts/{partId} {
-      allow read: if isActiveUser();
-      allow create, update, delete: if isAdmin();
+      allow get: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() &&
+          ((!exists(/databases/$(database)/documents/spare_parts/$(partId)) && hasPermission('spareparts.manage')) ||
+           (exists(/databases/$(database)/documents/spare_parts/$(partId)) &&
+            (hasPermission('spareparts.read') || hasPermission('spareparts.manage')) &&
+            hasAssignedScope('', resource.data.warehouseId))));
+      allow list: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && (hasPermission('spareparts.read') || hasPermission('spareparts.manage')) &&
+          hasAssignedScope('', resource.data.warehouseId));
+      allow create: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('spareparts.manage') &&
+          hasAssignedScope('', request.resource.data.warehouseId));
+      allow update: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('spareparts.manage') &&
+          hasAssignedScope('', resource.data.warehouseId) &&
+          hasAssignedScope('', request.resource.data.warehouseId));
+      allow delete: if isPrimaryController() || isLegacyItManager();
     }
 
-    // Maintenance parts consumption events
+    // Parts consumption is an append-only maintenance event with inherited scope.
     match /maintenance_parts/{usageId} {
-      allow read: if isActiveUser();
-      allow create: if isAdmin();
+      allow read: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('maintenance.read') &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
+      allow create: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('maintenance.manage') &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
       allow update, delete: if false;
     }
 
     // Procurement invoices and warranties
     match /purchase_records/{purchaseId} {
-      allow read: if isActiveUser();
+      allow read: if isActiveUser() && !isScopedAccessEnabled();
       allow create, update: if isAdmin();
       allow delete: if isAdmin();
     }
 
-    // Movements and audits timeline
+    // Movements and audit timeline inherit the location of the source record.
     match /asset_movements/{movementId} {
-      allow read: if isActiveUser();
-      allow create: if isAdmin();
+      allow read: if isPrimaryController() || isLegacyItManager() ||
+        (
+          isScopedAccessEnabled() &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId) &&
+          (hasPermission('assets.read') || hasPermission('assets.update') || hasPermission('custody.read') || hasPermission('custody.manage') || hasPermission('maintenance.read') || hasPermission('maintenance.manage'))
+        );
+      allow create: if isPrimaryController() || isLegacyItManager() ||
+        (
+          isScopedAccessEnabled() &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId) &&
+          (
+            hasPermission('assets.create') || hasPermission('assets.update') ||
+            hasPermission('custody.manage') || hasPermission('maintenance.manage')
+          )
+        );
       allow update, delete: if false;
     }
 
     // System settings and controller configuration
     match /system_settings/{docId} {
-      // Auth bootstrap and the app's settings listener run before the user profile loads.
-      allow read: if signedIn();
+      // The controller identity is readable for auth bootstrap; integration settings stay controller-only.
+      allow read: if signedIn() && (docId == 'controller' || isPrimaryController());
 
       // Allow exactly one initial controller bootstrap. Subsequent edits to
       // controller identity and all other system settings require that UID.
@@ -151,15 +357,52 @@ service cloud.firestore {
       allow create, update, delete: if docId != 'controller' && isPrimaryController();
     }
 
-    // Documents and attachment metadata
+    // Document metadata follows the location of its linked asset.
+    function isAssetDocumentScopeSync() {
+      let parentAssetPath = /databases/$(database)/documents/assets/$(resource.data.assetId);
+      return isScopedAccessEnabled() &&
+        hasPermission('assets.update') &&
+        hasAssignedScope(resource.data.officeId, resource.data.warehouseId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['officeId', 'warehouseId']) &&
+        existsAfter(parentAssetPath) &&
+        getAfter(parentAssetPath).data.officeId == request.resource.data.officeId &&
+        getAfter(parentAssetPath).data.warehouseId == request.resource.data.warehouseId;
+    }
+
     match /asset_documents/{documentId} {
-      allow read: if isActiveUser();
-      allow create, update, delete: if isAdmin();
+      allow read: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() &&
+          (hasPermission('documents.read') || hasPermission('documents.manage')) &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
+      allow create: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('documents.manage') &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
+      // Asset transfers may update only the two scope fields, and only when
+      // the parent asset is moved to the exact same scope in this transaction.
+      allow update: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('documents.manage') &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId) &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId)) ||
+        isAssetDocumentScopeSync();
+      allow delete: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('documents.manage') &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
     }
 
     // Import batches audit
     match /import_batches/{batchId} {
       allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // Physical inventory checks are append-only and scoped to the checked asset location.
+    match /inventory_checks/{checkId} {
+      allow read: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && (hasPermission('inventory.read') || hasPermission('inventory.manage')) &&
+          hasAssignedScope(resource.data.officeId, resource.data.warehouseId));
+      allow create: if isPrimaryController() || isLegacyItManager() ||
+        (isScopedAccessEnabled() && hasPermission('inventory.manage') &&
+          hasAssignedScope(request.resource.data.officeId, request.resource.data.warehouseId));
       allow update, delete: if false;
     }
 

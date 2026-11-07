@@ -43,12 +43,14 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
 }) => {
   const { profile } = useAuth();
   const actorName = profile?.displayName || 'المسؤول';
+  const canManageMaintenance = profile?.accessControlEnabled !== true || profile.permissions?.['maintenance.manage'] === true;
+  const canManageSpareParts = profile?.accessControlEnabled !== true || profile.permissions?.['spareparts.manage'] === true;
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Modals
-  const [isOpenAddModal, setIsOpenAddModal] = useState(Boolean(initialAssetForMaintenance));
+  const [isOpenAddModal, setIsOpenAddModal] = useState(Boolean(initialAssetForMaintenance) && canManageMaintenance);
   const [selectedAssetId, setSelectedAssetId] = useState(initialAssetForMaintenance?.id || '');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -129,7 +131,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
     setPartError('');
 
     try {
-      await consumeSparePart(selectedPartId, consumingRecord.id, partQty, partNotes, actorName);
+      await consumeSparePart(selectedPartId, consumingRecord.id, partQty, partNotes, actorName, profile);
       setConsumingRecord(null);
       setSelectedPartId('');
       setPartQty(1);
@@ -163,7 +165,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
           </p>
         </div>
 
-        <button
+        {canManageMaintenance && <button
           onClick={() => {
             setSelectedAssetId(eligibleAssets[0]?.id || '');
             setTitle('');
@@ -176,7 +178,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
         >
           <Plus className="w-4 h-4" />
           <span>فتح تذكرة صيانة</span>
-        </button>
+        </button>}
       </div>
 
       {/* Filter Bar */}
@@ -282,7 +284,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                 {/* Bottom Actions for Open Tickets */}
                 {isOpen && (
                   <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-                    <button
+                    {canManageSpareParts && <button
                       onClick={() => {
                         setConsumingRecord(record);
                         setSelectedPartId(spareParts[0]?.id || '');
@@ -294,8 +296,8 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                     >
                       <Boxes className="w-3.5 h-3.5 text-slate-500" />
                       <span>صرف قطعة غيار</span>
-                    </button>
-                    <button
+                    </button>}
+                    {canManageMaintenance && <button
                       onClick={() => {
                         setCompletingRecord(record);
                         setResolution('');
@@ -305,7 +307,7 @@ export const MaintenanceView: React.FC<MaintenanceViewProps> = ({
                     >
                       <CheckCircle className="w-3.5 h-3.5" />
                       <span>إكمال وإغلاق</span>
-                    </button>
+                    </button>}
                   </div>
                 )}
               </div>

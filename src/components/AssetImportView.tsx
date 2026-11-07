@@ -13,9 +13,9 @@ import {
   Sparkles,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { Asset, AssetCategory, AssetStatus, ASSET_CATEGORY_LABELS, ASSET_STATUS_LABELS } from '../types';
+import { Asset, AssetCategory, AssetStatus, ASSET_CATEGORY_LABELS, ASSET_STATUS_LABELS, Office } from '../types';
 import { parseCSV } from '../services/importService';
-import { createAsset, updateAsset } from '../services/assetService';
+import { createAsset, transferAsset, updateAsset } from '../services/assetService';
 import { useAuth } from '../context/AuthContext';
 
 interface EditableImportRow {
@@ -37,11 +37,13 @@ interface EditableImportRow {
 
 interface AssetImportViewProps {
   assets: Asset[];
+  offices: Office[];
   onImportComplete?: () => void;
 }
 
 export const AssetImportView: React.FC<AssetImportViewProps> = ({
   assets,
+  offices,
   onImportComplete,
 }) => {
   const { profile, user } = useAuth();
@@ -392,6 +394,13 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
       appliedSerials.add(normalizedSerial);
 
       try {
+        const matchedOffice = offices.find((office) =>
+          office.name.trim().toLowerCase() === row.officeName.trim().toLowerCase()
+        );
+        if (profile?.accessControlEnabled === true && !matchedOffice) {
+          throw new Error('المكتب الموجود في الملف غير موجود ضمن المكاتب المصرح بها للمستخدم');
+        }
+
         if (row.isExisting) {
           // Never report a silent success when the matched asset disappeared
           // or the preview no longer points to a valid existing asset.
@@ -404,13 +413,29 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
             continue;
           }
 
+          const destinationChanged = Boolean(
+            matchedOffice &&
+            (original.officeId !== matchedOffice.id ||
+              (original.warehouseId || '') !== (matchedOffice.warehouseId || ''))
+          );
+          if (destinationChanged && matchedOffice) {
+            await transferAsset(
+              original,
+              matchedOffice,
+              'تحديث موقع الأصل عبر استيراد ملف',
+              actorName
+            );
+          }
+
           await updateAsset({
             ...original,
             brand: row.brand,
             model: row.model,
             category: row.category,
             serialNumber: normalizedSerial,
-            officeName: row.officeName,
+            officeName: matchedOffice?.name || row.officeName,
+            officeId: matchedOffice?.id || original.officeId,
+            warehouseId: matchedOffice?.warehouseId || original.warehouseId,
             cpu: row.cpu || undefined,
             ram: row.ram || undefined,
             storage: row.storage || undefined,
@@ -425,7 +450,9 @@ export const AssetImportView: React.FC<AssetImportViewProps> = ({
               brand: row.brand,
               model: row.model,
               serialNumber: row.serialNumber,
-              officeName: row.officeName || 'المستودع الرئيسي',
+              officeName: matchedOffice?.name || row.officeName || 'المستودع الرئيسي',
+              officeId: matchedOffice?.id || '',
+              warehouseId: matchedOffice?.warehouseId || '',
               status: row.status,
               cpu: row.cpu || undefined,
               ram: row.ram || undefined,

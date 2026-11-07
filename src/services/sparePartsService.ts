@@ -8,51 +8,67 @@ import {
   where,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { SparePart, MaintenancePartUsage } from '../types';
+import { buildAssignedScopeConstraintGroups } from './scopedQueries';
+import { SparePart, MaintenancePartUsage, UserProfile } from '../types';
 
 export function watchSpareParts(
   onData: (parts: SparePart[]) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  scope?: UserProfile | null
 ) {
-  const partsRef = collection(db, 'spare_parts');
-  const q = query(partsRef, orderBy('name', 'asc'));
-
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const parts = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      })) as SparePart[];
-      onData(parts);
-    },
-    (error) => {
-      handleFirestoreError(error, OperationType.GET, 'spare_parts');
-      onError?.(error as Error);
-    }
-  );
+  const ref = collection(db, 'spare_parts');
+  if (scope?.accessControlEnabled === true) {
+    const ids = [...new Set(scope.warehouseIds || [])].filter(Boolean);
+    if (!ids.length) { onData([]); return () => undefined; }
+    const chunks: string[][] = [];
+    for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
+    const snapshots = new Map<string, Map<string, SparePart>>();
+    const unsubs = chunks.map((chunk, index) => onSnapshot(
+      query(ref, where('warehouseId', 'in', chunk), orderBy('name', 'asc')),
+      (snapshot) => {
+        snapshots.set(String(index), new Map(snapshot.docs.map((item) => [
+          item.id, { id: item.id, ...item.data() } as SparePart,
+        ])));
+        const merged = new Map<string, SparePart>();
+        snapshots.forEach((items) => items.forEach((part, id) => merged.set(id, part)));
+        onData([...merged.values()].sort((a, b) => a.name.localeCompare(b.name)));
+      },
+      (error) => { handleFirestoreError(error, OperationType.GET, 'spare_parts'); onError?.(error as Error); }
+    ));
+    return () => unsubs.forEach((unsubscribe) => unsubscribe());
+  }
+  return onSnapshot(query(ref, orderBy('name', 'asc')), (snapshot) => {
+    onData(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as SparePart[]);
+  }, (error) => { handleFirestoreError(error, OperationType.GET, 'spare_parts'); onError?.(error as Error); });
 }
 
 export function watchMaintenanceUsages(
   maintenanceId: string,
-  onData: (usages: MaintenancePartUsage[]) => void
+  onData: (usages: MaintenancePartUsage[]) => void,
+  scope?: UserProfile | null
 ) {
   const ref = collection(db, 'maintenance_parts');
-  const q = query(ref, where('maintenanceId', '==', maintenanceId));
-
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const usages = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      })) as MaintenancePartUsage[];
-      onData(usages);
-    },
-    (error) => {
-      handleFirestoreError(error, OperationType.GET, 'maintenance_parts');
-    }
-  );
+  if (scope?.accessControlEnabled === true) {
+    const groups = buildAssignedScopeConstraintGroups(scope.officeIds || [], scope.warehouseIds || []);
+    if (!groups.length) { onData([]); return () => undefined; }
+    const snapshots = new Map<string, Map<string, MaintenancePartUsage>>();
+    const unsubs = groups.map(({ key, constraints }) => onSnapshot(
+      query(ref, where('maintenanceId', '==', maintenanceId), ...constraints),
+      (snapshot) => {
+        snapshots.set(key, new Map(snapshot.docs.map((item) => [
+          item.id, { id: item.id, ...item.data() } as MaintenancePartUsage,
+        ])));
+        const merged = new Map<string, MaintenancePartUsage>();
+        snapshots.forEach((items) => items.forEach((usage, id) => merged.set(id, usage)));
+        onData([...merged.values()]);
+      },
+      (error) => handleFirestoreError(error, OperationType.GET, 'maintenance_parts')
+    ));
+    return () => unsubs.forEach((unsubscribe) => unsubscribe());
+  }
+  return onSnapshot(query(ref, where('maintenanceId', '==', maintenanceId)), (snapshot) => {
+    onData(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as MaintenancePartUsage[]);
+  }, (error) => handleFirestoreError(error, OperationType.GET, 'maintenance_parts'));
 }
 
 export async function addSparePart(part: Omit<SparePart, 'id'> & { id?: string }) {
@@ -74,6 +90,7 @@ export async function addSparePart(part: Omit<SparePart, 'id'> & { id?: string }
         minimumQuantity: Number(part.minimumQuantity) || 0,
         unitCost: Number(part.unitCost) || 0,
         supplier: part.supplier.trim(),
+        warehouseId: part.warehouseId || '',
         createdAt: now,
         updatedAt: now,
       });
@@ -88,7 +105,8 @@ export async function consumeSparePart(
   maintenanceId: string,
   quantity: number,
   notes: string = '',
-  actorName: string = ''
+  actorName: string = '',
+  scope?: UserProfile | null
 ) {
   if (quantity <= 0) throw new Error('الكمية المصروفة يجب أن تكون أكبر من صفر');
 
@@ -116,6 +134,11 @@ export async function consumeSparePart(
         throw new Error(`الكمية المتاحة (${available}) غير كافية لصرف (${quantity})`);
       }
 
+      if (scope?.accessControlEnabled === true &&
+        (!part.warehouseId || !ticket.warehouseId || part.warehouseId !== ticket.warehouseId)) {
+        throw new Error('قطعة الغيار وطلب الصيانة يجب أن يتبعا المستودع المصرح نفسه');
+      }
+
       const unitCost = Number(part.unitCost) || 0;
       const totalCost = unitCost * quantity;
       const now = new Date().toISOString();
@@ -136,6 +159,8 @@ export async function consumeSparePart(
         partName: part.name || '',
         maintenanceId,
         assetId: ticket.assetId || '',
+        officeId: ticket.officeId || '',
+        warehouseId: ticket.warehouseId || part.warehouseId || '',
         quantity,
         unitCost,
         totalCost,

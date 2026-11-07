@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   BarChart3,
   Download,
@@ -40,17 +40,71 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [officeFilter, setOfficeFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const [printQrMode, setPrintQrMode] = useState(false);
   const [qrCodesMap, setQrCodesMap] = useState<Record<string, string>>({});
 
-  // Filtered Assets for report
-  const filteredAssets = assets.filter((asset) => {
-    const matchesCat = categoryFilter === 'all' || asset.category === categoryFilter;
-    const matchesStatus = statusFilter === 'all' || asset.status === statusFilter;
-    const matchesOffice = officeFilter === 'all' || asset.officeId === officeFilter;
-    return matchesCat && matchesStatus && matchesOffice;
-  });
+  // Keep the filtered collection stable so QR generation does not restart on every render.
+  const dateRangeValid = !dateFrom || !dateTo || dateFrom <= dateTo;
+  const filteredAssets = useMemo(() => {
+    if (!dateRangeValid) return [];
+    return assets.filter((asset) => {
+      const receivedDate = asset.receivedAt?.slice(0, 10) || '';
+      const matchesCat = categoryFilter === 'all' || asset.category === categoryFilter;
+      const matchesStatus = statusFilter === 'all' || asset.status === statusFilter;
+      const matchesOffice = officeFilter === 'all' || asset.officeId === officeFilter;
+      const matchesFrom = !dateFrom || (receivedDate !== '' && receivedDate >= dateFrom);
+      const matchesTo = !dateTo || (receivedDate !== '' && receivedDate <= dateTo);
+      return matchesCat && matchesStatus && matchesOffice && matchesFrom && matchesTo;
+    });
+  }, [assets, categoryFilter, statusFilter, officeFilter, dateFrom, dateTo, dateRangeValid]);
+
+  // Maintenance indicators use the same selected period, based on ticket opening date.
+  const filteredMaintenance = useMemo(() => {
+    if (!dateRangeValid) return [];
+    return maintenanceRecords.filter((record) => {
+      const openedDate = record.reportedAt?.slice(0, 10) || '';
+      return (!dateFrom || (openedDate !== '' && openedDate >= dateFrom)) &&
+        (!dateTo || (openedDate !== '' && openedDate <= dateTo));
+    });
+  }, [maintenanceRecords, dateFrom, dateTo, dateRangeValid]);
+
+  const maintenanceLaborCost = filteredMaintenance.reduce((sum, record) => sum + (Number(record.cost) || 0), 0);
+  const maintenancePartsCost = filteredMaintenance.reduce((sum, record) => sum + (Number(record.partsCost) || 0), 0);
+  const completedMaintenance = filteredMaintenance.filter((record) => record.status === 'completed').length;
+
+  const categoryBreakdown = Object.entries(ASSET_CATEGORY_LABELS)
+    .map(([key, label]) => ({
+      key,
+      label,
+      count: filteredAssets.filter((asset) => asset.category === key).length,
+    }))
+    .filter((item) => item.count > 0)
+    .sort((a, b) => b.count - a.count);
+  const statusBreakdown = Object.entries(ASSET_STATUS_LABELS)
+    .map(([key, info]) => ({
+      key,
+      label: info.label,
+      count: filteredAssets.filter((asset) => asset.status === key).length,
+      color: info.color,
+      background: info.bg,
+    }))
+    .filter((item) => item.count > 0)
+    .sort((a, b) => b.count - a.count);
+  const maxCategoryCount = Math.max(1, ...categoryBreakdown.map((item) => item.count));
+  const officeBreakdown = Object.values(filteredAssets.reduce<Record<string, { name: string; count: number; available: number; assigned: number; maintenance: number }>>((groups, asset) => {
+    const key = asset.officeId || asset.officeName || 'warehouse';
+    const name = asset.officeName || (asset.officeId ? offices.find((office) => office.id === asset.officeId)?.name : '') || 'المستودع / غير محدد';
+    const group = groups[key] || (groups[key] = { name, count: 0, available: 0, assigned: 0, maintenance: 0 });
+    group.count += 1;
+    if (asset.status === 'available') group.available += 1;
+    if (asset.status === 'assigned') group.assigned += 1;
+    if (asset.status === 'maintenance') group.maintenance += 1;
+    return groups;
+  }, {})).sort((a, b) => b.count - a.count);
+  const maxOfficeCount = Math.max(1, ...officeBreakdown.map((item) => item.count));
 
   // Pre-generate QR codes for labels sheet when in QR mode
   useEffect(() => {
@@ -92,9 +146,37 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     }));
 
     const ws = XLSX.utils.json_to_sheet(data);
+    const maintenanceData = filteredMaintenance.map((record) => ({
+      'رقم التذكرة': record.id,
+      'الأصل المرتبط': record.assetLabel,
+      'عنوان العطل': record.title,
+      'وصف العطل': record.description,
+      'الأولوية': record.priority,
+      'الحالة': record.status,
+      'الفني': record.technician || '',
+      'تاريخ الفتح': record.reportedAt ? new Date(record.reportedAt).toLocaleDateString('ar-EG') : '',
+      'تاريخ الإكمال': record.completedAt ? new Date(record.completedAt).toLocaleDateString('ar-EG') : '',
+      'تكلفة العمل': Number(record.cost) || 0,
+      'تكلفة القطع': Number(record.partsCost) || 0,
+      'الإجمالي': (Number(record.cost) || 0) + (Number(record.partsCost) || 0),
+      'نتيجة الإصلاح': record.resolution || '',
+    }));
+    const maintenanceSheet = XLSX.utils.json_to_sheet(maintenanceData);
+    const summarySheet = XLSX.utils.aoa_to_sheet([
+      ['ملخص التقرير'],
+      ['الفترة', dateFrom || 'بداية السجل', dateTo || 'حتى اليوم'],
+      ['عدد الأصول', filteredAssets.length],
+      ['عدد تذاكر الصيانة', filteredMaintenance.length],
+      ['التذاكر المكتملة', completedMaintenance],
+      ['تكلفة أعمال الصيانة', maintenanceLaborCost],
+      ['تكلفة قطع الصيانة', maintenancePartsCost],
+      ['إجمالي تكلفة الصيانة', maintenanceLaborCost + maintenancePartsCost],
+    ]);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'تقرير الأصول');
-    XLSX.writeFile(wb, `تقرير_أصول_تقنية_المعلومات_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'الملخص');
+    XLSX.utils.book_append_sheet(wb, ws, 'الأصول');
+    XLSX.utils.book_append_sheet(wb, maintenanceSheet, 'الصيانة');
+    XLSX.writeFile(wb, `تقرير_الأصول_والصيانة_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   // Export to CSV
@@ -110,22 +192,30 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       'cpu',
       'ram',
       'storage',
+      'receivedAt',
     ];
+    const escapeCsv = (value: unknown) => {
+      let text = String(value ?? '');
+      // Prevent spreadsheet formula execution when opening exported CSV files.
+      if (/^[\s]*[=+@-]/.test(text)) text = `'${text}`;
+      return `"${text.replace(/"/g, '""')}"`;
+    };
     const rows = filteredAssets.map((a) => [
       a.id,
-      `"${a.brand}"`,
-      `"${a.model}"`,
+      a.brand,
+      a.model,
       a.category,
-      `"${a.serialNumber}"`,
-      `"${a.officeName || ''}"`,
+      a.serialNumber,
+      a.officeName || '',
       a.status,
-      `"${a.cpu || ''}"`,
-      `"${a.ram || ''}"`,
-      `"${a.storage || ''}"`,
-    ]);
+      a.cpu || '',
+      a.ram || '',
+      a.storage || '',
+      a.receivedAt || '',
+    ].map(escapeCsv));
 
     const csvContent =
-      '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      '\uFEFF' + [headers.map(escapeCsv).join(','), ...rows.map((r) => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -238,10 +328,153 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           ))}
         </select>
 
+        {/* Received date range */}
+        <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+          <span>من تاريخ الاستلام</span>
+          <input
+            type="date"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="text-xs py-2 px-2 bg-slate-50 border border-slate-200 rounded-xl"
+          />
+        </label>
+        <label className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+          <span>إلى تاريخ الاستلام</span>
+          <input
+            type="date"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="text-xs py-2 px-2 bg-slate-50 border border-slate-200 rounded-xl"
+          />
+        </label>
+        {(dateFrom || dateTo) && (
+          <button
+            type="button"
+            onClick={() => { setDateFrom(''); setDateTo(''); }}
+            className="text-xs font-bold text-[#168C8C] hover:underline"
+          >
+            مسح الفترة
+          </button>
+        )}
+
         <span className="text-xs font-bold text-slate-400 mr-auto">
-          نتائج التقرير: {filteredAssets.length} أصل
+          {dateRangeValid ? `نتائج التقرير: ${filteredAssets.length} أصل` : 'الفترة غير صحيحة: تاريخ البداية بعد تاريخ النهاية'}
         </span>
       </div>
+
+      {/* Maintenance summary for the selected reporting period */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+          <p className="text-xs font-bold text-slate-500">تذاكر الصيانة ضمن الفترة</p>
+          <p className="text-2xl font-black text-[#183B56] mt-2">{filteredMaintenance.length}</p>
+          <p className="text-[11px] text-slate-400 mt-1">حسب تاريخ فتح التذكرة</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+          <p className="text-xs font-bold text-slate-500">التذاكر المكتملة</p>
+          <p className="text-2xl font-black text-emerald-700 mt-2">{completedMaintenance}</p>
+          <p className="text-[11px] text-slate-400 mt-1">من إجمالي تذاكر الفترة</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+          <p className="text-xs font-bold text-slate-500">تكلفة أعمال الصيانة</p>
+          <p className="text-2xl font-black text-amber-700 mt-2">{maintenanceLaborCost.toLocaleString('ar-EG')}</p>
+          <p className="text-[11px] text-slate-400 mt-1">تكلفة العمل المسجلة</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+          <p className="text-xs font-bold text-slate-500">تكلفة قطع الصيانة</p>
+          <p className="text-2xl font-black text-indigo-700 mt-2">{maintenancePartsCost.toLocaleString('ar-EG')}</p>
+          <p className="text-[11px] text-slate-400 mt-1">قيمة القطع المسجلة في التذاكر</p>
+        </div>
+      </div>
+
+      {/* Asset distribution analytics */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
+          <h3 className="font-black text-[#183B56] mb-4">توزيع الأصول حسب التصنيف</h3>
+          {categoryBreakdown.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-5">لا توجد بيانات ضمن التصفية الحالية</p>
+          ) : (
+            <div className="space-y-3">
+              {categoryBreakdown.map((item) => (
+                <div key={item.key}>
+                  <div className="flex justify-between text-xs font-bold mb-1.5">
+                    <span className="text-slate-600">{item.label}</span>
+                    <span className="text-[#183B56]">{item.count} أصل ({Math.round((item.count / Math.max(1, filteredAssets.length)) * 100)}%)</span>
+                  </div>
+                  <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div className="h-full rounded-full bg-[#168C8C]" style={{ width: `${(item.count / maxCategoryCount) * 100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+        <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
+          <h3 className="font-black text-[#183B56] mb-4">توزيع الأصول حسب الحالة</h3>
+          {statusBreakdown.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-5">لا توجد بيانات ضمن التصفية الحالية</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {statusBreakdown.map((item) => (
+                <div key={item.key} className={`rounded-xl border p-3 ${item.background}`}>
+                  <p className={`text-xs font-bold ${item.color}`}>{item.label}</p>
+                  <p className={`text-2xl font-black mt-1 ${item.color}`}>{item.count}</p>
+                  <p className="text-[10px] text-slate-500 mt-1">{Math.round((item.count / Math.max(1, filteredAssets.length)) * 100)}% من الأصول</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* Office comparison */}
+      <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <div>
+            <h3 className="font-black text-[#183B56]">مقارنة توزيع الأصول بين المكاتب</h3>
+            <p className="text-xs text-slate-400 mt-1">عدد الأصول وحالتها التشغيلية وفق نتائج التصفية الحالية</p>
+          </div>
+          <span className="text-xs font-bold text-slate-500">{officeBreakdown.length} موقع</span>
+        </div>
+        {officeBreakdown.length === 0 ? (
+          <p className="text-sm text-slate-400 text-center py-5">لا توجد بيانات للمقارنة</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  <th className="p-3 font-bold">المكتب / الموقع</th>
+                  <th className="p-3 font-bold">إجمالي الأصول</th>
+                  <th className="p-3 font-bold">متوفر</th>
+                  <th className="p-3 font-bold">في العهدة</th>
+                  <th className="p-3 font-bold">قيد الصيانة</th>
+                  <th className="p-3 font-bold min-w-36">الحصة من النتائج</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {officeBreakdown.map((item) => (
+                  <tr key={item.name}>
+                    <td className="p-3 font-bold text-slate-700">{item.name}</td>
+                    <td className="p-3 font-black text-[#183B56]">{item.count}</td>
+                    <td className="p-3 text-emerald-700 font-bold">{item.available}</td>
+                    <td className="p-3 text-blue-700 font-bold">{item.assigned}</td>
+                    <td className="p-3 text-amber-700 font-bold">{item.maintenance}</td>
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 flex-1 rounded-full bg-slate-100 overflow-hidden">
+                          <div className="h-full rounded-full bg-[#168C8C]" style={{ width: `${(item.count / maxOfficeCount) * 100}%` }} />
+                        </div>
+                        <span className="text-slate-500 w-9 text-left">{Math.round((item.count / Math.max(1, filteredAssets.length)) * 100)}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {/* Printable QR Code Labels Sheet View */}
       {printQrMode ? (
@@ -260,8 +493,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             </button>
           </div>
 
+          {filteredAssets.length > 48 && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              يتم تجهيز أول 48 ملصقاً في كل دفعة طباعة. قلّص نتائج التصفية لطباعة مجموعة أخرى.
+            </p>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 print:grid-cols-3">
-            {filteredAssets.map((asset) => (
+            {filteredAssets.slice(0, 48).map((asset) => (
               <div
                 key={asset.id}
                 className="p-3 border-2 border-dashed border-slate-300 rounded-xl text-center bg-white break-inside-avoid"
@@ -299,6 +537,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             <p className="text-sm font-bold text-slate-600 mt-1">تقرير جرد الأصول الشامل والمفصل</p>
             <div className="flex items-center justify-between text-xs text-slate-500 mt-3 pt-2 border-t border-slate-100">
               <span>تاريخ التقرير: {new Date().toLocaleDateString('ar-EG')}</span>
+              <span>الفترة: {dateFrom || 'بداية السجل'} — {dateTo || 'حتى اليوم'}</span>
               <span>عدد الأصول المشمولة: {filteredAssets.length} جهاز</span>
             </div>
           </div>

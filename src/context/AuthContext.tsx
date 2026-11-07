@@ -34,8 +34,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const SUPER_ADMIN_EMAIL = 'gfa437926@gmail.com';
-
 // In-memory token storage (never in localStorage per security guidelines)
 let inMemoryAccessToken: string | null = null;
 
@@ -84,7 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const controllerRef = doc(db, 'system_settings', 'controller');
         const controllerSnap = await getDoc(controllerRef);
 
-        let isFirstController = false;
+        let isControllerAccount = false;
         if (!controllerSnap.exists()) {
           const controllerData = {
             primaryUid: currentUser.uid,
@@ -93,7 +91,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
           try {
             await setDoc(controllerRef, controllerData);
-            isFirstController = true;
+            isControllerAccount = true;
             setPrimaryControllerUid(currentUser.uid);
             setPrimaryControllerEmail(currentUser.email || '');
           } catch (e) {
@@ -103,6 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const data = controllerSnap.data();
           setPrimaryControllerUid(data.primaryUid || null);
           setPrimaryControllerEmail(data.primaryEmail || null);
+          isControllerAccount = data.primaryUid === currentUser.uid;
         }
 
         // 2. Fetch or create user profile
@@ -112,20 +111,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (userSnap.exists()) {
           setProfile(userSnap.data() as UserProfile);
         } else {
-          const isSuperAdmin =
-            currentUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() ||
-            isFirstController;
-
           const newProfile: UserProfile = {
             uid: currentUser.uid,
             displayName:
               currentUser.displayName ||
               (currentUser.email ? currentUser.email.split('@')[0] : 'المتحكم بالمنظومة'),
             email: currentUser.email || '',
-            // Only the designated super-admin / first controller receives admin access.
+            // Only the immutable primary-controller UID receives the admin role.
             // All other self-registered accounts start with the limited IT manager role.
-            role: isSuperAdmin ? 'admin' : 'it_manager',
+            role: isControllerAccount ? 'admin' : 'it_manager',
             isActive: true,
+            // New non-controller accounts start locked to an empty scope until
+            // the primary controller assigns explicit permissions and locations.
+            accessControlEnabled: !isControllerAccount,
+            permissions: {},
+            officeIds: [],
+            warehouseIds: [],
             createdAt: new Date().toISOString(),
           };
 
@@ -244,7 +245,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isPrimaryController =
     Boolean(user?.uid) && primaryControllerUid === user?.uid;
 
-  const isAdmin = profile?.role === 'admin' && profile?.isActive === true;
+  // Admin-only UI follows the immutable controller UID, not a mutable profile role.
+  const isAdmin = isPrimaryController && profile?.isActive === true;
   const isItManager =
     (profile?.role === 'admin' || profile?.role === 'it_manager') && profile?.isActive === true;
 

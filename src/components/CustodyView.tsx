@@ -52,6 +52,7 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
   const actorUid = user?.uid || '';
   const actorName = profile?.displayName || user?.email || 'المسؤول';
   const actorEmail = user?.email || '';
+  const canManageCustody = profile?.accessControlEnabled !== true || profile.permissions?.['custody.manage'] === true;
 
   // View presentation mode
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
@@ -62,7 +63,7 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
 
   // Card editor modal state
-  const [isEditorOpen, setIsEditorOpen] = useState(Boolean(initialAssetForCustody));
+  const [isEditorOpen, setIsEditorOpen] = useState(Boolean(initialAssetForCustody) && canManageCustody);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
 
   // Form Fields matching user's official form
@@ -344,8 +345,8 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
   const handleSaveCard = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!isPrimaryController) {
-      setFormError('عذراً، فقط المتحكم الأول المرتبط بحسابه مصرح له بإدخال أو تعديل البطاقات.');
+    if (!canManageCustody) {
+      setFormError('لا تملك صلاحية إدارة بطاقات العهد ضمن نطاقك الحالي.');
       return;
     }
 
@@ -379,6 +380,8 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
           directorate: directorate.trim(),
           department: department.trim(),
           officeName: officeName.trim(),
+          officeId: offices.find((office) => office.name === officeName)?.id || initialAssetForCustody?.officeId || '',
+          warehouseId: offices.find((office) => office.name === officeName)?.warehouseId || initialAssetForCustody?.warehouseId || '',
           officeRoom: officeRoom.trim(),
           items: cardItems,
           itDepartmentHead: itDepartmentHead.trim(),
@@ -466,7 +469,7 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
       {/* Primary Controller Access Banner */}
       <div
         className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-          isPrimaryController
+          canManageCustody
             ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
             : 'bg-amber-50/80 border-amber-200 text-amber-900'
         }`}
@@ -474,18 +477,18 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
         <div className="flex items-center gap-3">
           <div
             className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              isPrimaryController
+              canManageCustody
                 ? 'bg-emerald-200 text-emerald-800'
                 : 'bg-amber-200 text-amber-800'
             }`}
           >
-            {isPrimaryController ? <Shield className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
+            {canManageCustody ? <Shield className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h4 className="font-bold text-sm">
-                {isPrimaryController
-                  ? 'المتحكم المعتمد بالمنظومة والحساب المرتبط'
+                {canManageCustody
+                  ? 'مستخدم مخول بإدارة بطاقات العهد ضمن نطاقه'
                   : 'وضع الاطلاع والبحث (Read-Only)'}
               </h4>
               <span className="text-[11px] px-2 py-0.5 rounded-full font-bold bg-white/80 border">
@@ -493,9 +496,9 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
               </span>
             </div>
             <p className="text-xs opacity-85 mt-0.5">
-              {isPrimaryController
-                ? 'أنت الشخص الوحيد المخول بإدخال وتعديل بطاقات العهدة، ويتم ربط ومزامنة البيانات تلقائياً مع Google Drive و Google Sheets.'
-                : 'يمكنك استعراض وبحث وطباعة بطاقات العهدة. عمليات الإدخال والتعديل محصورة بالمتحكم الأول.'}
+              {canManageCustody
+                ? 'يمكنك إدخال وتعديل بطاقات العهد ضمن المكاتب والمستودعات المسندة إليك.'
+                : 'يمكنك استعراض وبحث وطباعة بطاقات العهدة فقط. لا تملك صلاحية التعديل ضمن نطاقك الحالي.'}
             </p>
           </div>
         </div>
@@ -566,7 +569,7 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
           </div>
 
           {/* Add New Card Button (Primary Controller Only) */}
-          {isPrimaryController ? (
+          {canManageCustody ? (
             <button
               onClick={handleOpenNewCard}
               className="flex items-center gap-2 px-4 py-2.5 bg-[#183B56] hover:bg-[#122c42] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
@@ -577,11 +580,11 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
           ) : (
             <button
               disabled
-              title="فقط المتحكم الأول بحسابه المرتبط يمكنه إدخال بطاقات جديدة"
+              title="لا تملك صلاحية إدارة بطاقات العهد ضمن نطاقك الحالي"
               className="flex items-center gap-2 px-4 py-2.5 bg-slate-300 text-slate-500 text-xs font-bold rounded-xl cursor-not-allowed opacity-75"
             >
               <Lock className="w-4 h-4" />
-              <span>إدخال بطاقة (مخصص للمتحكم)</span>
+              <span>إدخال بطاقة (غير مصرح)</span>
             </button>
           )}
         </div>
@@ -805,25 +808,23 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
                           >
                             <Printer className="w-3.5 h-3.5" />
                           </button>
+                          {canManageCustody && (
+                            <button
+                              onClick={() => handleEditCard(card)}
+                              title="تعديل البطاقة"
+                              className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           {isPrimaryController && (
-                            <>
-                              <button
-                                onClick={() => handleEditCard(card)}
-                                title="تعديل البطاقة"
-                                className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() =>
-                                  handleDeleteCard(card.id, card.responsibleName || card.employeeName)
-                                }
-                                title="حذف البطاقة"
-                                className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </>
+                            <button
+                              onClick={() => handleDeleteCard(card.id, card.responsibleName || card.employeeName)}
+                              title="حذف البطاقة"
+                              className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           )}
                         </div>
                       </td>
@@ -865,7 +866,7 @@ export const CustodyView: React.FC<CustodyViewProps> = ({
                     >
                       <Printer className="w-4 h-4" />
                     </button>
-                    {isPrimaryController && (
+                    {canManageCustody && (
                       <button
                         onClick={() => handleEditCard(card)}
                         title="تعديل"

@@ -7,9 +7,12 @@ import {
   orderBy,
   getDocs,
   serverTimestamp,
+  addDoc,
+  where,
+  Query,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { Asset, AssetStatus, Office } from '../types';
+import { Asset, AssetStatus, Office, UserProfile } from '../types';
 
 function normalizeSerial(serial: string): string {
   return serial.trim().toUpperCase();
@@ -29,11 +32,80 @@ function serialToDocId(serial: string): string {
 
 export function watchAssets(
   onData: (assets: Asset[]) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  scope?: UserProfile | null
 ) {
   const assetsRef = collection(db, 'assets');
-  const q = query(assetsRef, orderBy('brand', 'asc'));
 
+  // Firestore rules are not filters. Scoped users must issue queries whose
+  // predicates prove that every returned asset belongs to an assigned office
+  // or warehouse; otherwise Firestore correctly rejects the entire query.
+  if (scope?.accessControlEnabled === true) {
+    const officeIds = [...new Set(scope.officeIds || [])].filter(Boolean);
+    const warehouseIds = [...new Set(scope.warehouseIds || [])].filter(Boolean);
+    const chunk = (ids: string[]) => {
+      const result: string[][] = [];
+      for (let i = 0; i < ids.length; i += 30) result.push(ids.slice(i, i + 30));
+      return result;
+    };
+    const officeChunks = chunk(officeIds);
+    const warehouseChunks = chunk(warehouseIds);
+    const scopedQueries: { key: string; q: Query }[] = [];
+
+    // Records with both IDs must satisfy both assignments in the same query.
+    for (const offices of officeChunks) {
+      for (const warehouses of warehouseChunks) {
+        scopedQueries.push({
+          key: `both:${offices.join(',')}:${warehouses.join(',')}`,
+          q: query(assetsRef, where('officeId', 'in', offices), where('warehouseId', 'in', warehouses)),
+        });
+      }
+      // Office-only records are permitted only when warehouseId is explicitly empty.
+      scopedQueries.push({
+        key: `office:${offices.join(',')}`,
+        q: query(assetsRef, where('officeId', 'in', offices), where('warehouseId', '==', '')),
+      });
+    }
+    // Warehouse-only records are permitted only when officeId is explicitly empty.
+    for (const warehouses of warehouseChunks) {
+      scopedQueries.push({
+        key: `warehouse:${warehouses.join(',')}`,
+        q: query(assetsRef, where('officeId', '==', ''), where('warehouseId', 'in', warehouses)),
+      });
+    }
+
+    if (scopedQueries.length === 0) {
+      onData([]);
+      return () => undefined;
+    }
+
+    const snapshots = new Map<string, Map<string, Asset>>();
+    const unsubs = scopedQueries.map(({ key, q }) =>
+      onSnapshot(
+        q,
+        (snapshot) => {
+          const current = new Map<string, Asset>();
+          for (const docSnap of snapshot.docs) {
+            current.set(docSnap.id, { id: docSnap.id, ...docSnap.data() } as Asset);
+          }
+          snapshots.set(key, current);
+          const merged = new Map<string, Asset>();
+          for (const value of snapshots.values()) {
+            for (const [id, asset] of value.entries()) merged.set(id, asset);
+          }
+          onData([...merged.values()].sort((a, b) => a.brand.localeCompare(b.brand)));
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.GET, 'assets');
+          onError?.(error as Error);
+        }
+      )
+    );
+
+    return () => unsubs.forEach((unsubscribe) => unsubscribe());
+  }
+
+  const q = query(assetsRef, orderBy('brand', 'asc'));
   return onSnapshot(
     q,
     (snapshot) => {
@@ -92,8 +164,10 @@ export async function createAsset(asset: Omit<Asset, 'id'> & { id?: string }, ac
       const movementRef = doc(collection(db, 'asset_movements'));
       tx.set(movementRef, {
         assetId,
+        officeId: asset.officeId || '',
+        warehouseId: asset.warehouseId || '',
         assetLabel: `${asset.brand} ${asset.model}`.trim(),
-        movementType: 'assigned',
+        movementType: 'created',
         toOffice: asset.officeName || 'المستودع الرئيسي',
         toOfficeName: asset.officeName || 'المستودع الرئيسي',
         toOfficeId: asset.officeId || '',
@@ -136,12 +210,22 @@ export async function updateAsset(asset: Asset) {
         }
       }
 
+      // Read the previous reservation before writes; remove it only if it still
+      // belongs to this asset, so a stale/corrupt index cannot erase another
+      // asset's serial reservation.
+      let mayDeleteOldReservation = false;
+      if (serialChanged && oldSerialRef) {
+        const oldSerialSnap = await tx.get(oldSerialRef);
+        mayDeleteOldReservation =
+          oldSerialSnap.exists() && oldSerialSnap.data().assetId === asset.id;
+      }
+
       tx.update(assetRef, {
         ...asset,
         serialNumber: serial,
       });
 
-      if (serialChanged && oldSerialRef) {
+      if (mayDeleteOldReservation && oldSerialRef) {
         tx.delete(oldSerialRef);
       }
 
@@ -168,6 +252,23 @@ export async function transferAsset(
   const officeRef = doc(db, 'offices', destination.id);
 
   try {
+    // Firestore transactions cannot execute collection queries. Fetch the
+    // narrowly scoped candidate set first, then re-read every candidate by
+    // document reference inside the transaction before applying any writes.
+    const fromOfficeId = asset.officeId || '';
+    const linkedDocumentsQuery = query(
+      collection(db, 'asset_documents'),
+      where('assetId', '==', asset.id),
+      where('officeId', '==', fromOfficeId)
+    );
+    const linkedDocumentsCandidates = await getDocs(linkedDocumentsQuery);
+
+    // Leave room for the asset, movement and office reads under Firestore's
+    // per-transaction write ceiling; fail safely rather than partially moving.
+    if (linkedDocumentsCandidates.size > 450) {
+      throw new Error('عدد وثائق الأصل كبير جداً لنقلها دفعة واحدة؛ يرجى تقسيم العملية أو مراجعة الدعم');
+    }
+
     await runTransaction(db, async (tx) => {
       const assetSnap = await tx.get(assetRef);
       const officeSnap = await tx.get(officeRef);
@@ -177,12 +278,20 @@ export async function transferAsset(
         throw new Error('المكتب الوجهة غير موجود أو غير فعال');
       }
 
+      const currentOfficeId = assetSnap.data().officeId || '';
+      if (currentOfficeId !== fromOfficeId) {
+        throw new Error('تغير موقع الأصل أثناء تنفيذ النقل؛ حدّث الصفحة ثم أعد المحاولة');
+      }
+
+      const linkedDocumentSnapshots = await Promise.all(
+        linkedDocumentsCandidates.docs.map((candidate) => tx.get(candidate.ref))
+      );
+
       const currentStatus = assetSnap.data().status as AssetStatus;
       if (currentStatus !== 'available' && currentStatus !== 'returned') {
         throw new Error('لا يمكن نقل الجهاز إلا إذا كان متاحاً وغير مرتبط بعهدة نشطة أو صيانة');
       }
 
-      const fromOfficeId = assetSnap.data().officeId || '';
       const fromOfficeName = assetSnap.data().officeName || 'غير محدد';
 
       if (fromOfficeId === destination.id) {
@@ -193,13 +302,29 @@ export async function transferAsset(
 
       tx.update(assetRef, {
         officeId: destination.id,
+        warehouseId: destination.warehouseId || '',
         officeName: destination.name,
         transferredAt: now,
+      });
+
+      linkedDocumentSnapshots.forEach((documentSnap) => {
+        if (
+          documentSnap.exists() &&
+          documentSnap.data().assetId === asset.id &&
+          (documentSnap.data().officeId || '') === fromOfficeId
+        ) {
+          tx.update(documentSnap.ref, {
+            officeId: destination.id,
+            warehouseId: destination.warehouseId || '',
+          });
+        }
       });
 
       const movementRef = doc(collection(db, 'asset_movements'));
       tx.set(movementRef, {
         assetId: asset.id,
+        officeId: destination.id,
+        warehouseId: destination.warehouseId || '',
         assetLabel: `${asset.brand} ${asset.model}`.trim(),
         movementType: 'transferred',
         occurredAt: now,
@@ -241,6 +366,8 @@ export async function retireAsset(asset: Asset, reason: string = '', actorName: 
       const movementRef = doc(collection(db, 'asset_movements'));
       tx.set(movementRef, {
         assetId: asset.id,
+        officeId: asset.officeId || '',
+        warehouseId: asset.warehouseId || '',
         assetLabel: `${asset.brand} ${asset.model}`.trim(),
         movementType: 'retired',
         occurredAt: now,
@@ -249,5 +376,39 @@ export async function retireAsset(asset: Asset, reason: string = '', actorName: 
     });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `assets/${asset.id}`);
+  }
+}
+
+
+/**
+ * Persist a physical inventory verification. The record is append-only and
+ * intentionally separate from asset movements: checking an item does not
+ * change its ownership, location, or operational status.
+ */
+export async function recordInventoryCheck(
+  asset: Asset,
+  actor: { uid: string; name: string; email?: string }
+): Promise<void> {
+  if (!actor.uid) throw new Error('يجب تسجيل الدخول لتوثيق عملية الجرد');
+  const checkedAt = new Date().toISOString();
+
+  try {
+    await addDoc(collection(db, 'inventory_checks'), {
+      assetId: asset.id,
+      assetLabel: `${asset.brand} ${asset.model}`.trim(),
+      serialNumber: normalizeSerial(asset.serialNumber),
+      category: asset.category,
+      statusAtCheck: asset.status,
+      officeId: asset.officeId || '',
+      warehouseId: asset.warehouseId || '',
+      officeName: asset.officeName || 'المستودع الرئيسي',
+      checkedAt,
+      checkedByUid: actor.uid,
+      checkedByName: actor.name,
+      checkedByEmail: actor.email || '',
+      method: 'qr_or_serial',
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'inventory_checks');
   }
 }

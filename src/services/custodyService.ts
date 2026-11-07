@@ -9,7 +9,8 @@ import {
   orderBy,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { CustodyRecord, CustodyItem } from '../types';
+import { buildAssignedScopeConstraintGroups } from './scopedQueries';
+import { CustodyRecord, CustodyItem, UserProfile } from '../types';
 
 export async function saveOfficialCustodyCard(
   card: Partial<CustodyRecord> & {
@@ -21,6 +22,12 @@ export async function saveOfficialCustodyCard(
   actorName: string,
   actorEmail?: string
 ): Promise<string> {
+  const responsibleName = card.responsibleName.trim();
+  const officeName = card.officeName.trim();
+  if (!responsibleName) throw new Error('اسم الموظف المسؤول مطلوب');
+  if (!officeName) throw new Error('اسم المكتب مطلوب');
+  if (!Array.isArray(card.items)) throw new Error('قائمة محتويات العهدة غير صالحة');
+
   const cardId = card.id || doc(collection(db, 'custody_cards')).id;
   const cardRef = doc(db, 'custody_cards', cardId);
   const now = new Date().toISOString();
@@ -42,6 +49,8 @@ export async function saveOfficialCustodyCard(
     directorate: card.directorate?.trim() || '',
     department: card.department?.trim() || '',
     officeName: card.officeName.trim(),
+    officeId: card.officeId || '',
+    warehouseId: card.warehouseId || '',
     officeRoom: card.officeRoom?.trim() || '',
     assetLabel,
     assignedAt: card.assignedAt || now,
@@ -57,19 +66,22 @@ export async function saveOfficialCustodyCard(
   };
 
   try {
-    await setDoc(cardRef, recordToSave, { merge: true });
-
-    // Record movement
+    // Keep the official custody card and its movement in one atomic write.
     const movementRef = doc(collection(db, 'asset_movements'));
-    await setDoc(movementRef, {
-      assetId: cardId,
-      assetLabel: `بطاقة عهدة: ${recordToSave.cardNumber} (${recordToSave.responsibleName})`,
-      movementType: card.id ? 'custody_transferred' : 'assigned',
-      toEmployee: recordToSave.responsibleName,
-      toOffice: `${recordToSave.directorate || ''} / ${recordToSave.department || ''} / ${recordToSave.officeName}`,
-      occurredAt: now,
-      custodyId: cardId,
-      notes: `تم توثيق بطاقة العهدة الرسمية بواسطة ${actorName || actorEmail || 'المتحكم'}`,
+    await runTransaction(db, async (tx) => {
+      tx.set(cardRef, recordToSave, { merge: true });
+      tx.set(movementRef, {
+        assetId: cardId,
+        officeId: recordToSave.officeId || '',
+        warehouseId: recordToSave.warehouseId || '',
+        assetLabel: `بطاقة عهدة: ${recordToSave.cardNumber} (${recordToSave.responsibleName})`,
+        movementType: card.id ? 'custody_transferred' : 'assigned',
+        toEmployee: recordToSave.responsibleName,
+        toOffice: `${recordToSave.directorate || ''} / ${recordToSave.department || ''} / ${recordToSave.officeName}`,
+        occurredAt: now,
+        custodyId: cardId,
+        notes: `تم توثيق بطاقة العهدة الرسمية بواسطة ${actorName || actorEmail || 'المتحكم'}`,
+      });
     });
 
     return cardId;
@@ -91,25 +103,31 @@ export async function deleteCustodyRecord(cardId: string): Promise<void> {
 
 export function watchCustodyCards(
   onData: (cards: CustodyRecord[]) => void,
-  onError?: (err: Error) => void
+  onError?: (err: Error) => void,
+  scope?: UserProfile | null
 ) {
-  const cardsRef = collection(db, 'custody_cards');
-  const q = query(cardsRef, orderBy('assignedAt', 'desc'));
-
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const cards = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      })) as CustodyRecord[];
-      onData(cards);
-    },
-    (error) => {
-      handleFirestoreError(error, OperationType.GET, 'custody_cards');
-      onError?.(error as Error);
-    }
-  );
+  const ref = collection(db, 'custody_cards');
+  if (scope?.accessControlEnabled === true) {
+    const groups = buildAssignedScopeConstraintGroups(scope.officeIds || [], scope.warehouseIds || []);
+    if (!groups.length) { onData([]); return () => undefined; }
+    const snapshots = new Map<string, Map<string, CustodyRecord>>();
+    const unsubs = groups.map(({ key, constraints }) => onSnapshot(
+      query(ref, ...constraints, orderBy('assignedAt', 'desc')),
+      (snapshot) => {
+        snapshots.set(key, new Map(snapshot.docs.map((item) => [
+          item.id, { id: item.id, ...item.data() } as CustodyRecord,
+        ])));
+        const merged = new Map<string, CustodyRecord>();
+        snapshots.forEach((items) => items.forEach((record, id) => merged.set(id, record)));
+        onData([...merged.values()].sort((a, b) => b.assignedAt.localeCompare(a.assignedAt)));
+      },
+      (error) => { handleFirestoreError(error, OperationType.GET, 'custody_cards'); onError?.(error as Error); }
+    ));
+    return () => unsubs.forEach((unsubscribe) => unsubscribe());
+  }
+  return onSnapshot(query(ref, orderBy('assignedAt', 'desc')), (snapshot) => {
+    onData(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as CustodyRecord[]);
+  }, (error) => { handleFirestoreError(error, OperationType.GET, 'custody_cards'); onError?.(error as Error); });
 }
 
 export async function addCustodyRecord(
@@ -145,6 +163,8 @@ export async function addCustodyRecord(
         assetLabel,
         employeeName: card.employeeName.trim(),
         officeName: card.officeName.trim(),
+        officeId: assetData.officeId || '',
+        warehouseId: assetData.warehouseId || '',
         assignedAt: now,
         status: 'active',
         approvalStatus: 'pending',
@@ -160,6 +180,8 @@ export async function addCustodyRecord(
       const movementRef = doc(collection(db, 'asset_movements'));
       tx.set(movementRef, {
         assetId: card.assetId,
+        officeId: assetData.officeId || '',
+        warehouseId: assetData.warehouseId || '',
         assetLabel,
         movementType: 'assigned',
         toEmployee: card.employeeName.trim(),
@@ -190,6 +212,14 @@ export async function approveCustodyRecord(
       if (data.status !== 'active' || data.approvalStatus !== 'pending') {
         throw new Error('بطاقة العهدة ليست بانتظار الاعتماد');
       }
+      if (!data.assetId) throw new Error('بطاقة العهدة غير مرتبطة بمعرّف أصل');
+
+      const assetRef = doc(db, 'assets', data.assetId);
+      const assetSnap = await tx.get(assetRef);
+      if (!assetSnap.exists()) throw new Error('الأصل المرتبط بالعهدة غير موجود');
+      if (assetSnap.data().status !== 'assigned') {
+        throw new Error('الأصل لم يعد في حالة تسليم؛ لا يمكن اعتماد العهدة قبل مراجعة حالته');
+      }
 
       const now = new Date().toISOString();
       tx.update(cardRef, {
@@ -201,6 +231,8 @@ export async function approveCustodyRecord(
       const movement = doc(collection(db, 'asset_movements'));
       tx.set(movement, {
         assetId: data.assetId,
+        officeId: data.officeId || '',
+        warehouseId: data.warehouseId || '',
         assetLabel: data.assetLabel,
         movementType: 'custody_approved',
         toEmployee: data.employeeName,
@@ -232,14 +264,16 @@ export async function rejectCustodyRecord(
       if (data.status !== 'active' || data.approvalStatus !== 'pending') {
         throw new Error('بطاقة العهدة ليست بانتظار الاعتماد');
       }
+      if (!data.assetId) throw new Error('بطاقة العهدة غير مرتبطة بمعرّف أصل');
 
-      if (data.assetId) {
-        const assetRef = doc(db, 'assets', data.assetId);
-        const assetSnap = await tx.get(assetRef);
-        if (assetSnap.exists()) {
-          tx.update(assetRef, { status: 'available' });
-        }
+      const assetRef = doc(db, 'assets', data.assetId);
+      const assetSnap = await tx.get(assetRef);
+      if (!assetSnap.exists()) throw new Error('الأصل المرتبط بالعهدة غير موجود');
+      if (assetSnap.data().status !== 'assigned') {
+        throw new Error('حالة الأصل لا تشير إلى عهدة نشطة؛ راجع سجل الأصل قبل رفض العهدة');
       }
+
+      tx.update(assetRef, { status: 'available' });
 
       const now = new Date().toISOString();
       tx.update(cardRef, {
@@ -252,7 +286,9 @@ export async function rejectCustodyRecord(
 
       const movement = doc(collection(db, 'asset_movements'));
       tx.set(movement, {
-        assetId: data.assetId || data.id,
+        assetId: data.assetId,
+        officeId: data.officeId || '',
+        warehouseId: data.warehouseId || '',
         assetLabel: data.assetLabel || 'بطاقة عهدة',
         movementType: 'custody_rejected',
         fromEmployee: data.responsibleName || data.employeeName,
@@ -277,18 +313,20 @@ export async function returnCustodyRecord(
     await runTransaction(db, async (tx) => {
       const cardSnap = await tx.get(cardRef);
       if (!cardSnap.exists()) throw new Error('بطاقة العهدة غير موجودة');
+      const data = cardSnap.data() as CustodyRecord;
+      if (data.status !== 'active') throw new Error('لا يمكن إرجاع عهدة مغلقة أو مُعادة مسبقاً');
+      if (data.approvalStatus !== 'approved') throw new Error('لا يمكن إرجاع عهدة لم يتم اعتمادها');
+      if (!data.assetId) throw new Error('بطاقة العهدة غير مرتبطة بمعرّف أصل');
+
+      const assetRef = doc(db, 'assets', data.assetId);
+      const assetSnap = await tx.get(assetRef);
+      if (!assetSnap.exists()) throw new Error('الأصل المرتبط بالعهدة غير موجود');
+      if (assetSnap.data().status !== 'assigned') {
+        throw new Error('حالة الأصل لا تشير إلى عهدة نشطة؛ راجع سجل الأصل قبل الإرجاع');
+      }
 
       const now = new Date().toISOString();
-
-      if (card.assetId) {
-        const assetRef = doc(db, 'assets', card.assetId);
-        const assetSnap = await tx.get(assetRef);
-        if (assetSnap.exists()) {
-          tx.update(assetRef, {
-            status: 'available',
-          });
-        }
-      }
+      tx.update(assetRef, { status: 'available' });
 
       tx.update(cardRef, {
         status: 'returned',
@@ -297,11 +335,11 @@ export async function returnCustodyRecord(
 
       const movement = doc(collection(db, 'asset_movements'));
       tx.set(movement, {
-        assetId: card.assetId || card.id,
-        assetLabel: card.assetLabel || 'بطاقة عهدة',
+        assetId: data.assetId,
+        assetLabel: data.assetLabel || 'بطاقة عهدة',
         movementType: 'returned',
-        fromEmployee: card.responsibleName || card.employeeName,
-        fromOffice: card.officeName,
+        fromEmployee: data.responsibleName || data.employeeName,
+        fromOffice: data.officeName,
         occurredAt: now,
         custodyId: card.id,
         notes: `إرجاع عهدة للمستودع بواسطة ${actorName || actorUid}`,
@@ -320,6 +358,11 @@ export async function transferCustodyRecord(
   actorUid: string,
   actorName: string
 ) {
+  const employeeName = newEmployeeName.trim();
+  const officeName = newOfficeName.trim();
+  if (!employeeName) throw new Error('اسم الموظف الجديد مطلوب');
+  if (!officeName) throw new Error('اسم المكتب الجديد مطلوب');
+
   const cardRef = doc(db, 'custody_cards', card.id);
 
   try {
@@ -330,30 +373,33 @@ export async function transferCustodyRecord(
       const data = cardSnap.data() as CustodyRecord;
       if (data.status !== 'active') throw new Error('لا يمكن نقل بطاقة عهدة مغلقة');
       if (data.approvalStatus !== 'approved') throw new Error('لا يمكن نقل عهدة قبل اعتمادها');
+      if (!data.assetId) throw new Error('بطاقة العهدة غير مرتبطة بمعرّف أصل');
 
-      const now = new Date().toISOString();
-
-      if (card.assetId) {
-        const assetRef = doc(db, 'assets', card.assetId);
-        const assetSnap = await tx.get(assetRef);
-        if (assetSnap.exists()) {
-          tx.update(assetRef, {
-            officeName: newOfficeName.trim(),
-          });
-        }
+      const assetRef = doc(db, 'assets', data.assetId);
+      const assetSnap = await tx.get(assetRef);
+      if (!assetSnap.exists()) throw new Error('الأصل المرتبط بالعهدة غير موجود');
+      if (assetSnap.data().status !== 'assigned') {
+        throw new Error('الأصل ليس في حالة عهدة نشطة؛ راجع سجل الأصل قبل نقل العهدة');
       }
 
+      const now = new Date().toISOString();
+      tx.update(assetRef, {
+        officeName,
+      });
+
       tx.update(cardRef, {
-        responsibleName: newEmployeeName.trim(),
-        employeeName: newEmployeeName.trim(),
-        officeName: newOfficeName.trim(),
+        responsibleName: employeeName,
+        employeeName,
+        officeName,
         transferredAt: now,
       });
 
       const movement = doc(collection(db, 'asset_movements'));
       tx.set(movement, {
-        assetId: card.assetId || card.id,
-        assetLabel: card.assetLabel || 'بطاقة عهدة',
+        assetId: data.assetId || card.id,
+        officeId: data.officeId || '',
+        warehouseId: data.warehouseId || '',
+        assetLabel: data.assetLabel || 'بطاقة عهدة',
         movementType: 'custody_transferred',
         fromEmployee: data.responsibleName || data.employeeName,
         toEmployee: newEmployeeName.trim(),

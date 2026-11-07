@@ -127,3 +127,23 @@ GitHub Actions workflows are provided for Windows installer and Android debug AP
 ### Google Sheets capacity safety
 
 Before exporting a full inventory snapshot, the integration reads the grid dimensions of every worksheet and expands only the two required export tabs when more rows or columns are needed. Existing worksheet dimensions are never reduced. The preflight includes all tabs in the spreadsheet and refuses an expansion that would exceed Google Sheets' 10-million-cell spreadsheet limit, reporting the required cell count before any snapshot rows are written.
+
+
+## Standalone Python edition
+
+A separate Arabic-first Python desktop edition is available in `python_app/`. It does not replace or connect automatically to the existing React/Firebase application.
+
+The current Python edition includes:
+- Asset register, offices, movements, retirement and audit history.
+- Multi-item custody cards with approval, rejection and return workflows.
+- Maintenance tickets, spare-parts stock and transactional parts consumption.
+- Purchase invoices and warranty history linked to assets.
+- Local asset attachments (PDF, PNG, JPG and TXT) with size/type validation.
+- Local user sign-in, first-run administrator setup, scrypt password hashing, temporary lockout and administrator-only user management.
+- Searchable audit history with CSV export and spreadsheet-formula protection.
+- Multi-sheet XLSX management report covering summary, assets, offices, custody cards/items, maintenance, spare parts, purchases, attachments, movements and audit events.
+- Arabic Excel import/export with validation and duplicate detection.
+
+The Python edition remains a separate local desktop deployment. Its local user accounts are not Firebase accounts; detailed office-scoped permissions, central identity, advanced time-series/financial analytics, external synchronization, backup/restore and final production acceptance remain outstanding.
+
+See [python_app/README.md](python_app/README.md) for Windows setup, SQLite/PostgreSQL configuration, the standalone EXE build and the current limitations.

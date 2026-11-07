@@ -1,0 +1,51 @@
+name: Python Asset Inventory Windows Build
+
+on:
+  push:
+    branches: [work/python-asset-inventory]
+    paths:
+      - "python_app/**"
+      - ".github/workflows/python-asset-inventory-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-executable:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install application and packager
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r python_app/requirements-build.txt
+      - name: Compile Python sources
+        run: python -m compileall -q python_app
+      - name: Build Windows desktop application
+        run: pyinstaller --clean --noconfirm --onefile --windowed --name ITFix-Asset-Inventory --paths . --collect-all sqlalchemy --collect-all psycopg --collect-all psycopg_binary --collect-all openpyxl --hidden-import psycopg_c python_app/launcher.py
+      - name: Build Windows backup verification and restore utility
+        run: pyinstaller --clean --noconfirm --onefile --console --name ITFix-Restore-Backup --paths . --collect-all sqlalchemy --collect-all psycopg --collect-all psycopg_binary --hidden-import psycopg_c python_app/restore_backup_launcher.py
+      - name: Include setup guide and configuration template
+        shell: pwsh
+        run: |
+          Copy-Item python_app/README.md dist/README-Python.md
+          Copy-Item python_app/.env.example dist/.env.example
+          Copy-Item python_app/README.md dist/README-Restore.md
+      - name: Upload Windows application
+        uses: actions/upload-artifact@v4
+        with:
+          name: ITFix-Asset-Inventory-Windows
+          path: |
+            dist/ITFix-Asset-Inventory.exe
+            dist/ITFix-Restore-Backup.exe
+            dist/README-Python.md
+            dist/README-Restore.md
+            dist/.env.example
+          if-no-files-found: error
+          retention-days: 14

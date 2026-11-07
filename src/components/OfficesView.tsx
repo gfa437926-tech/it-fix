@@ -21,7 +21,8 @@ interface OfficesViewProps {
 }
 
 export const OfficesView: React.FC<OfficesViewProps> = ({ offices, assets }) => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, profile } = useAuth();
+  const canManageOffices = profile?.accessControlEnabled !== true || profile.permissions?.['offices.manage'] === true;
 
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -80,6 +81,7 @@ export const OfficesView: React.FC<OfficesViewProps> = ({ offices, assets }) => 
     try {
       await saveOffice({
         id: editingOffice?.id,
+        warehouseId: editingOffice?.warehouseId || '',
         name: name.trim(),
         building: building.trim(),
         directorate: directorate.trim(),
@@ -222,7 +224,7 @@ export const OfficesView: React.FC<OfficesViewProps> = ({ offices, assets }) => 
                   </div>
                 </div>
 
-                {isAdmin && (
+                {canManageOffices && (
                   <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-end gap-1.5">
                     <button
                       onClick={() => handleToggleActive(office)}
