@@ -21,6 +21,10 @@ jobs:
           node-version: 24.12.0
       - name: Install dependencies
         run: npm install --legacy-peer-deps --no-audit --no-fund
+      - name: Install Firebase rules test tools
+        run: npm install --no-save --legacy-peer-deps @firebase/rules-unit-testing firebase-tools
+      - name: Firestore and Storage rules tests (emulators only)
+        run: npm run test:rules
       - name: TypeScript check
         run: npm run lint
       - name: Production web build
